@@ -65,6 +65,15 @@ trakt_metadata_language: zh-CN
 
 授权状态（Trakt token、TMDB key、所有设置）保存在 vault 的 `.obsidian/plugins/obsidian-sync-trakt/data.json` 里，跟随你的 vault 同步走。在 Mac 上配一次，通过 Obsidian Sync（勾选 `Plugin data` 同步）、Syncthing、iCloud + 高级数据保护、或 Cryptomator 同步到 iPhone。**插件不在任何服务器存储数据**。
 
+## 📊 在 Obsidian Bases 里查看影库
+
+`trakt_poster_url` frontmatter 字段**开箱即用**，配合 [Obsidian Bases](https://help.obsidian.md/bases)（Obsidian 1.9.3+）—— 在你同步出来的文件夹上建一个 database 视图，海报会作为缩略图显示：
+
+- **卡片视图**：打开 Display 设置 → 把 **Image property** 选成 `trakt_poster_url`
+- **表格视图**（1.9.4+）：加一个 formula 列，用 `image(note.trakt_poster_url)`
+
+按 `trakt_type = "movie"` / `"show"` 过滤、按 `trakt_year` / `trakt_rating` / `trakt_my_rating` 排序、按 `trakt_genres` 分组都行。Dataview 查询用的那套 frontmatter 属性，Bases 视图也能直接用 —— 没有额外配置。
+
 ## 🚀 快速开始
 
 1. 通过 [BRAT](https://github.com/TfTHacker/obsidian42-brat) 安装 → **Add a beta plugin for testing** → `o1xhack/obsidian-sync-trakt`

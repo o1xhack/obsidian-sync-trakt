@@ -369,6 +369,24 @@ const STRINGS = {
   "status.syncing": { en: "⟳ Syncing…", "zh-CN": "⟳ 同步中…" },
   "status.prefix": { en: "Traktr: ", "zh-CN": "Traktr：" },
 
+  // ── Progress messages (status bar during sync) ──
+  "progress.fetchingTrakt": {
+    en: "⟳ Fetching from Trakt…",
+    "zh-CN": "⟳ 正在拉取 Trakt 数据…",
+  },
+  "progress.fetchingMetadata": {
+    en: "⟳ Loading metadata: {done}/{total}",
+    "zh-CN": "⟳ 加载元数据：{done}/{total}",
+  },
+  "progress.fetchingTranslations": {
+    en: "⟳ Loading translations: {done}/{total}",
+    "zh-CN": "⟳ 加载翻译：{done}/{total}",
+  },
+  "progress.writingNotes": {
+    en: "⟳ Writing notes: {done}/{total}",
+    "zh-CN": "⟳ 写入笔记：{done}/{total}",
+  },
+
   // ── Auth modal ──
   "authModal.title": { en: "Connect", "zh-CN": "连接" },
   "authModal.requestingCode": {

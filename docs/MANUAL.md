@@ -116,6 +116,12 @@ When localization is enabled, sync resolves translations in this order:
 
 Both templates have a **Reset to default** button.
 
+**Common customizations:**
+
+- **Title** — there's no separate "Title" template field. The title becomes the note's **filename** (controlled by the **Filename template** setting), and it's also exposed as the `{{title}}` variable for the body. To show the title as a heading at the top of every note, add `# {{title}}` to the start of your Movie / TV show template.
+- **Tagline** — the bundled movie template renders the tagline as a blockquote (`> {{tagline}}`). Edit the template directly to change the format — e.g. `**Tagline:** *{{tagline}}*` for an inline label, or just delete the line. Shows don't have a tagline in Trakt's data, so the show template doesn't reference one.
+- **Anything else** — every variable in [§ 6.3 Template variables](#template-variables) is available; you can rearrange / remove sections freely. Click **Reset to default** if you want to start over.
+
 ### Tags
 
 | Setting | Default | Description |

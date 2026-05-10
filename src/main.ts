@@ -46,7 +46,7 @@ export default class TraktrPlugin extends Plugin {
         this.updateStatusBar(
           getTranslator(this.settings.uiLanguage)("status.syncing"),
         );
-        await this.syncEngine.sync();
+        await this.syncEngine.sync((msg) => this.updateStatusBar(msg));
         this.updateStatusBar("");
       },
     });
@@ -90,7 +90,7 @@ export default class TraktrPlugin extends Plugin {
           this.updateStatusBar(
             getTranslator(this.settings.uiLanguage)("status.syncing"),
           );
-          await this.syncEngine.sync();
+          await this.syncEngine.sync((msg) => this.updateStatusBar(msg));
           this.updateStatusBar("");
         })();
       }, 5000);
@@ -131,9 +131,17 @@ export default class TraktrPlugin extends Plugin {
       this.autoSyncIntervalId = window.setInterval(() => {
         void (async () => {
           try {
-            await this.syncEngine.sync();
+            // Auto-sync also drives the status bar so a long background sync
+            // doesn't look like nothing is happening — same callback shape
+            // as the manual command, no UI surprises.
+            this.updateStatusBar(
+              getTranslator(this.settings.uiLanguage)("status.syncing"),
+            );
+            await this.syncEngine.sync((msg) => this.updateStatusBar(msg));
+            this.updateStatusBar("");
           } catch (e) {
             console.error("Trakt auto-sync failed:", e);
+            this.updateStatusBar("");
           }
         })();
       }, intervalMs);

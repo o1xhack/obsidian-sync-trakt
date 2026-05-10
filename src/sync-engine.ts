@@ -34,7 +34,35 @@ import {
   buildFrontmatterData,
   updateManagedBodySections,
 } from "./note-renderer";
-import { sanitizeFilename, renderTemplate, parseFrontmatter } from "./utils";
+import {
+  sanitizeFilename,
+  renderTemplate,
+  parseFrontmatter,
+  processWithConcurrency,
+} from "./utils";
+
+/**
+ * Cap on simultaneous TMDB requests during a sync. Keeps the user's CPU /
+ * network unloaded, gives the status bar room to update mid-sync, and
+ * sidesteps TMDB's rate limit (50 req/s) — a `Promise.all` burst over 1000+
+ * items can saturate the bucket and trigger 429s, which we silently swallow
+ * as "no poster".
+ */
+const TMDB_CONCURRENCY = 5;
+
+/**
+ * Cap on simultaneous Trakt /translations fallback calls (only used when no
+ * TMDB API key is configured). Trakt allows 1000 req / 5min, so 5 in flight
+ * is comfortably below the limit.
+ */
+const TRAKT_TRANSLATION_CONCURRENCY = 5;
+
+/**
+ * Progress reporter: called periodically with a human-readable status line.
+ * Used by the plugin to drive the status-bar text — `sync()` accepts an
+ * optional callback so the engine stays UI-agnostic.
+ */
+export type SyncProgress = (message: string) => void;
 
 // ── Normalization helpers ──
 
@@ -298,7 +326,7 @@ export class SyncEngine {
     this.saveSettings = saveSettings;
   }
 
-  async sync(): Promise<SyncResult> {
+  async sync(onProgress?: SyncProgress): Promise<SyncResult> {
     const t = getTranslator(this.settings.uiLanguage);
     if (this.syncing) {
       new Notice(t("notice.alreadySyncing"));
@@ -321,6 +349,7 @@ export class SyncEngine {
 
       // 2. Fetch from all enabled sources in parallel, merging into a single
       //    map keyed by "type:trakt_id" to avoid cross-type ID collisions.
+      onProgress?.(t("progress.fetchingTrakt"));
       const merged = new Map<string, NormalizedItem>();
 
       await Promise.all([
@@ -332,7 +361,7 @@ export class SyncEngine {
       await this.ensureTagNotes(merged);
 
       // 4. Reconcile all items into the single notes folder
-      await this.reconcileType(merged, result);
+      await this.reconcileType(merged, result, onProgress);
 
       // 5. Show result
       console.debug(`[Traktr] Sync complete — added: ${result.added}, updated: ${result.updated}, removed: ${result.removed}, failed: ${result.failed}`);
@@ -559,8 +588,10 @@ export class SyncEngine {
    */
   private async reconcileType(
     mergedItems: Map<string, NormalizedItem>,
-    result: SyncResult
+    result: SyncResult,
+    onProgress?: SyncProgress,
   ): Promise<void> {
+    const t = getTranslator(this.settings.uiLanguage);
     const folderPath = normalizePath(this.settings.folder);
     await ensureFolder(this.app, folderPath);
 
@@ -570,16 +601,22 @@ export class SyncEngine {
       this.settings.propertyPrefix
     );
 
-    // Fetch poster + (optionally) translation in a single TMDB call per item.
-    // When metadataLanguage is unset, the call shape is unchanged from the
-    // pre-i18n version, so default behavior is byte-stable.
+    // Fetch poster + (optionally) translation per item from TMDB. We use a
+    // bounded concurrency pool (5 in flight) instead of a Promise.all burst:
+    //   - lets the status bar show real progress while running
+    //   - keeps us comfortably under TMDB's 50 req/s rate limit
+    //   - 1000+ item libraries no longer blast the rate-limit bucket and
+    //     silently lose posters/translations to swallowed 429s
     const language = getEffectiveMetadataLanguage(this.settings);
+    const itemList = [...mergedItems.values()];
     if (this.settings.tmdbApiKey) {
-      await Promise.all(
-        [...mergedItems.values()].map(async (item) => {
+      await processWithConcurrency(
+        itemList,
+        TMDB_CONCURRENCY,
+        async (item) => {
           if (!item.ids.tmdb) {
-            // No TMDB ID — try Trakt's translation endpoint as a fallback when
-            // i18n is enabled. Posters require TMDB, so we skip those.
+            // No TMDB ID — try Trakt's translation endpoint as a fallback
+            // when i18n is enabled. Posters require TMDB, so we skip those.
             if (language) {
               await this.applyTraktTranslation(item, language);
             }
@@ -597,19 +634,34 @@ export class SyncEngine {
           if (meta.translation) {
             applyTranslation(item, meta.translation);
           }
-        })
+        },
+        (done, total) =>
+          onProgress?.(t("progress.fetchingMetadata", { done, total })),
       );
     } else if (language) {
-      // No TMDB key + i18n enabled → fall back to Trakt's translation endpoint.
-      await Promise.all(
-        [...mergedItems.values()].map((item) =>
-          this.applyTraktTranslation(item, language),
-        ),
+      // No TMDB key + i18n enabled → fall back to Trakt's translation
+      // endpoint. Same concurrency-limited treatment as the TMDB path.
+      await processWithConcurrency(
+        itemList,
+        TRAKT_TRANSLATION_CONCURRENCY,
+        (item) => this.applyTraktTranslation(item, language),
+        (done, total) =>
+          onProgress?.(t("progress.fetchingTranslations", { done, total })),
       );
     }
 
     // Create or update notes
+    let writeIndex = 0;
+    const writeTotal = mergedItems.size;
     for (const [key, item] of mergedItems) {
+      writeIndex++;
+      // Throttle progress updates so we don't spam the status bar — every
+      // 10 items, or on the last one, is enough to feel responsive.
+      if (writeIndex % 10 === 0 || writeIndex === writeTotal) {
+        onProgress?.(
+          t("progress.writingNotes", { done: writeIndex, total: writeTotal }),
+        );
+      }
       try {
         const existingFile = localNotes.get(key);
 

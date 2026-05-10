@@ -6,6 +6,41 @@ export function sanitizeFilename(name: string): string {
 }
 
 /**
+ * Run an async worker over a list of items with bounded concurrency. Reports
+ * progress as items finish, which makes long-running phases (TMDB metadata
+ * fetch over thousands of items) actually feel responsive — and reduces the
+ * chance of TMDB rate-limiting compared to a `Promise.all` burst.
+ *
+ * Order of completion is non-deterministic (whichever worker finishes first
+ * grabs the next item), but `worker` receives the original index so callers
+ * can write back into a stable position if they care.
+ */
+export async function processWithConcurrency<T>(
+  items: ReadonlyArray<T>,
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<void>,
+  onProgress?: (done: number, total: number) => void,
+): Promise<void> {
+  const total = items.length;
+  if (total === 0) return;
+  const lanes = Math.max(1, Math.min(concurrency, total));
+  let nextIndex = 0;
+  let completed = 0;
+
+  async function runLane(): Promise<void> {
+    while (true) {
+      const i = nextIndex++;
+      if (i >= total) return;
+      await worker(items[i], i);
+      completed++;
+      onProgress?.(completed, total);
+    }
+  }
+
+  await Promise.all(Array.from({ length: lanes }, () => runLane()));
+}
+
+/**
  * Simple {{variable}} template interpolation.
  * Arrays are joined with ", ". Null/undefined become empty string.
  */

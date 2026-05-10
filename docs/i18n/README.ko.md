@@ -65,6 +65,15 @@ trakt_metadata_language: ko-KR
 
 인증 상태(Trakt 토큰, TMDB 키, 모든 설정)는 vault의 `.obsidian/plugins/obsidian-sync-trakt/data.json`에 저장되며 vault 동기화 레이어를 따릅니다. Mac에서 한 번 설정한 후 Obsidian Sync(`Plugin data` 활성화), Syncthing, iCloud + Advanced Data Protection, 또는 Cryptomator를 통해 iPhone과 공유할 수 있습니다. **플러그인은 어떤 서버에도 데이터를 저장하지 않습니다.**
 
+## 📊 Obsidian Bases에서 라이브러리 보기
+
+`trakt_poster_url` frontmatter 필드는 [Obsidian Bases](https://help.obsidian.md/bases)(Obsidian 1.9.3+)와 **즉시 호환**됩니다 — 동기화 폴더 위에 데이터베이스 뷰를 만들면 포스터가 썸네일로 표시됩니다:
+
+- **카드 뷰**: Display 설정 열기 → **Image property**를 `trakt_poster_url`로 설정
+- **테이블 뷰**(1.9.4+): `image(note.trakt_poster_url)` formula 컬럼 추가
+
+`trakt_type = "movie"` / `"show"`로 필터링, `trakt_year` / `trakt_rating` / `trakt_my_rating`으로 정렬, `trakt_genres`로 그룹화 모두 가능합니다. Dataview 쿼리에 사용하는 frontmatter 속성은 Bases 뷰에서도 그대로 작동합니다 — 추가 설정 불필요.
+
 ## 🚀 빠른 시작
 
 1. [BRAT](https://github.com/TfTHacker/obsidian42-brat) 으로 설치 → **Add a beta plugin for testing** → `o1xhack/obsidian-sync-trakt`

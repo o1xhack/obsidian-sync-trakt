@@ -24,10 +24,12 @@ import {
   pickTraktTranslation,
   type TraktTranslation,
 } from "../src/trakt-api";
+import { pickBestTranslation } from "../src/tmdb-api";
 import {
   aggregateMovieHistory,
   aggregateShowHistory,
 } from "../src/sync-engine";
+import { processWithConcurrency } from "../src/utils";
 import type { TraktHistoryItem } from "../src/types";
 import {
   DEFAULT_SETTINGS,
@@ -958,10 +960,199 @@ After.`;
   }
 }
 
-// ── Summary ───────────────────────────────────────────────────────────────
-console.log(`\n${"=".repeat(60)}`);
-console.log(`Smoke results: ${passes} passed, ${failures} failed`);
-console.log("=".repeat(60));
-if (failures > 0) {
-  process.exit(1);
+// ── Test 18: pickBestTranslation — TMDB title fallback chain ──────────────
+console.log(
+  "\n[18] pickBestTranslation — handles TMDB locked-blank-title quirk",
+);
+{
+  // Reproduces the user-reported bug: TMDB returns the English original at
+  // the top level for movies where zh-CN translation is locked blank, but
+  // zh-TW / zh-HK still have valid Chinese titles. We need to walk the
+  // translations array client-side to find them.
+  const homeAlone2 = {
+    poster_path: "/some.jpg",
+    original_title: "Home Alone 2: Lost in New York",
+    title: "Home Alone 2: Lost in New York", // locked blank → fallback
+    overview: "",
+    tagline: "",
+    genres: [{ name: "Comedy" }, { name: "Family" }],
+    translations: {
+      translations: [
+        {
+          iso_639_1: "zh",
+          iso_3166_1: "CN",
+          data: { title: "", overview: "", tagline: "" }, // locked blank
+        },
+        {
+          iso_639_1: "zh",
+          iso_3166_1: "TW",
+          data: {
+            title: "小鬼當家2：紐約迷途記",
+            overview: "...",
+            tagline: "",
+          },
+        },
+        {
+          iso_639_1: "zh",
+          iso_3166_1: "HK",
+          data: { title: "寶貝智多星續集 玩轉紐約", overview: "", tagline: "" },
+        },
+      ],
+    },
+  };
+  const t1 = pickBestTranslation(homeAlone2, "zh-CN", "movie");
+  assertTrue(!!t1, "zh-CN: returns a translation despite blank CN row");
+  assertEq(
+    t1?.title,
+    "小鬼當家2：紐約迷途記",
+    "zh-CN falls back to TW when CN is blank",
+  );
+
+  const t2 = pickBestTranslation(homeAlone2, "zh-TW", "movie");
+  assertEq(t2?.title, "小鬼當家2：紐約迷途記", "zh-TW gets TW directly");
+
+  const t3 = pickBestTranslation(homeAlone2, "zh-HK", "movie");
+  assertEq(t3?.title, "寶貝智多星續集 玩轉紐約", "zh-HK gets HK directly");
 }
+
+// ── Test 19: pickBestTranslation — main response is real translation ──────
+console.log(
+  "\n[19] pickBestTranslation — trusts main response when it's truly localized",
+);
+{
+  // When TMDB DOES return a real Chinese title at the top level (title
+  // differs from original_title), we should trust it and not override with
+  // the translations array. Also fills in overview/tagline from translations
+  // if main response has them blank.
+  const someMovie = {
+    poster_path: "/a.jpg",
+    original_title: "The Dark Knight",
+    title: "黑暗骑士",
+    overview: "一段中文 overview。",
+    tagline: "",
+    genres: [{ name: "动作" }],
+    translations: {
+      translations: [
+        {
+          iso_639_1: "zh",
+          iso_3166_1: "CN",
+          data: {
+            title: "黑暗骑士",
+            overview: "一段中文 overview。",
+            tagline: "为什么这么严肃？",
+          },
+        },
+      ],
+    },
+  };
+  const t = pickBestTranslation(someMovie, "zh-CN", "movie");
+  assertEq(t?.title, "黑暗骑士", "uses main title directly");
+  assertEq(
+    t?.overview,
+    "一段中文 overview。",
+    "uses main overview directly",
+  );
+  assertEq(
+    t?.tagline,
+    "为什么这么严肃？",
+    "fills tagline from translations when main is empty",
+  );
+  assertEq(t?.genres, ["动作"], "genres come from main response");
+}
+
+// ── Test 20: pickBestTranslation — no Chinese translation at all ──────────
+console.log(
+  "\n[20] pickBestTranslation — returns null when no usable translation",
+);
+{
+  const englishOnly = {
+    poster_path: "/a.jpg",
+    original_title: "Some English Movie",
+    title: "Some English Movie", // fallback
+    overview: "",
+    tagline: "",
+    genres: [],
+    translations: {
+      translations: [
+        {
+          iso_639_1: "en",
+          iso_3166_1: "US",
+          data: { title: "Some English Movie" },
+        },
+        // no zh entries
+      ],
+    },
+  };
+  const t = pickBestTranslation(englishOnly, "zh-CN", "movie");
+  assertEq(t, null, "no zh entries → null");
+}
+
+// ── Test 21: pickBestTranslation — TV uses `name` instead of `title` ──────
+console.log("\n[21] pickBestTranslation — TV path reads `name` field");
+{
+  const someTv = {
+    poster_path: "/a.jpg",
+    original_name: "Breaking Bad",
+    name: "Breaking Bad", // top-level fallback to original
+    overview: "",
+    tagline: "",
+    genres: [{ name: "Drama" }],
+    translations: {
+      translations: [
+        {
+          iso_639_1: "zh",
+          iso_3166_1: "CN",
+          data: { name: "绝命毒师", overview: "...", tagline: "" },
+        },
+      ],
+    },
+  };
+  const t = pickBestTranslation(someTv, "zh-CN", "tv");
+  assertEq(t?.title, "绝命毒师", "TV uses name field");
+}
+
+// ── Test 22 + summary (async tail) ────────────────────────────────────────
+// CJS bundle disallows top-level await, so the async work + summary go in
+// one IIFE at the end of the file.
+void (async () => {
+  console.log("\n[22] processWithConcurrency — limits concurrency and reports progress");
+  {
+    let inFlight = 0;
+    let maxObserved = 0;
+    const completed: number[] = [];
+    const progressUpdates: Array<{ done: number; total: number }> = [];
+
+    const work = async (n: number) => {
+      inFlight++;
+      if (inFlight > maxObserved) maxObserved = inFlight;
+      await new Promise<void>((r) => setTimeout(r, 5 + (n % 3) * 3));
+      inFlight--;
+      completed.push(n);
+    };
+
+    const items = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    await processWithConcurrency(items, 3, work, (done, total) =>
+      progressUpdates.push({ done, total }),
+    );
+
+    assertEq(completed.length, items.length, "every item processed exactly once");
+    assertTrue(
+      maxObserved <= 3,
+      `max in-flight (${maxObserved}) respects concurrency=3`,
+    );
+    assertEq(
+      progressUpdates.length,
+      items.length,
+      "progress callback fires once per completion",
+    );
+    assertEq(progressUpdates[items.length - 1].done, items.length, "final done = total");
+    assertEq(progressUpdates[items.length - 1].total, items.length, "total stays correct");
+  }
+
+  console.log(`\n${"=".repeat(60)}`);
+  console.log(`Smoke results: ${passes} passed, ${failures} failed`);
+  console.log("=".repeat(60));
+  if (failures > 0) {
+    process.exit(1);
+  }
+})();

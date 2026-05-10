@@ -65,6 +65,15 @@ trakt_metadata_language: ja-JP
 
 認証情報（Trakt トークン、TMDB キー、すべての設定）は vault の `.obsidian/plugins/obsidian-sync-trakt/data.json` に保存され、vault の同期レイヤーに従います。Mac で一度設定すれば、Obsidian Sync（`Plugin data` を有効化）、Syncthing、iCloud + Advanced Data Protection、または Cryptomator 経由で iPhone と共有できます。**プラグインはサーバーにデータを保存しません**。
 
+## 📊 Obsidian Bases でライブラリを表示
+
+`trakt_poster_url` フロントマター項目は [Obsidian Bases](https://help.obsidian.md/bases)（Obsidian 1.9.3+）で**そのまま使えます** —— 同期フォルダ上にデータベースビューを作成すれば、ポスターがサムネイルとして表示されます：
+
+- **カードビュー**：Display 設定を開く → **Image property** を `trakt_poster_url` に設定
+- **テーブルビュー**（1.9.4+）：`image(note.trakt_poster_url)` の formula カラムを追加
+
+`trakt_type = "movie"` / `"show"` でフィルタ、`trakt_year` / `trakt_rating` / `trakt_my_rating` でソート、`trakt_genres` でグループ化、すべて可能です。Dataview クエリで使用するフロントマター項目はそのまま Bases ビューでも使えます —— 追加設定は不要。
+
 ## 🚀 クイックスタート
 
 1. [BRAT](https://github.com/TfTHacker/obsidian42-brat) でインストール → **Add a beta plugin for testing** → `o1xhack/obsidian-sync-trakt`

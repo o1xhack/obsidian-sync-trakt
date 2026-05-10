@@ -65,6 +65,15 @@ The settings tab, command palette, and notice popups speak both **English** and 
 
 Auth state — Trakt tokens, TMDB key, all settings — lives in `<vault>/.obsidian/plugins/obsidian-sync-trakt/data.json` and follows your vault-sync layer. Configure auth once on Mac, share with iPhone via Obsidian Sync (with `Plugin data` enabled), Syncthing, iCloud + Advanced Data Protection, or Cryptomator. The plugin doesn't store anything on a server.
 
+## 📊 View your library in Obsidian Bases
+
+The `trakt_poster_url` frontmatter field works out-of-the-box with [Obsidian Bases](https://help.obsidian.md/bases) (Obsidian 1.9.3+). Build a database view of your sync folder and display posters as thumbnails:
+
+- **Card view**: open Display settings → set **Image property** to `trakt_poster_url`
+- **Table view** (1.9.4+): add a formula column with `image(note.trakt_poster_url)`
+
+Filter by `trakt_type = "movie"` / `"show"`, sort by `trakt_year` / `trakt_rating` / `trakt_my_rating`, group by `trakt_genres`. The same frontmatter properties that power Dataview queries also power Bases views — no extra setup.
+
 ## 🚀 Quick start
 
 1. Install via [BRAT](https://github.com/TfTHacker/obsidian42-brat) → **Add a beta plugin for testing** → `o1xhack/obsidian-sync-trakt`
