@@ -7,9 +7,10 @@ import {
 import { AuthModal } from "./trakt-auth";
 import { SyncEngine } from "./sync-engine";
 import { getTranslator } from "./i18n";
+import { clearTmdbCache } from "./tmdb-api";
 
 export default class TraktrPlugin extends Plugin {
-  settings: TraktrSettings = DEFAULT_SETTINGS;
+  settings: TraktrSettings = { ...DEFAULT_SETTINGS };
   private syncEngine!: SyncEngine;
   private autoSyncIntervalId: number | null = null;
   private statusBarEl: HTMLElement | null = null;
@@ -27,6 +28,17 @@ export default class TraktrPlugin extends Plugin {
 
     // Settings tab
     this.addSettingTab(new TraktrSettingTab(this.app, this));
+
+    // [0.2.0] Re-read data.json from disk when Obsidian becomes visible
+    // again. Cross-device flow: Mac syncs, vault sync layer propagates
+    // data.json to iPhone; if the iPhone plugin only read data.json once
+    // at onload(), the new state would be invisible until reload. This
+    // catches the user-returns-to-app event and pulls fresh state.
+    this.registerDomEvent(document, "visibilitychange", () => {
+      if (document.visibilityState === "visible") {
+        void this.refreshSettingsFromDisk();
+      }
+    });
 
     const t = getTranslator(this.settings.uiLanguage);
 
@@ -73,6 +85,39 @@ export default class TraktrPlugin extends Plugin {
       },
     });
 
+    // [0.2.0] Force a full Trakt history refresh on the next sync. Useful
+    // when the user knows they just deleted a wrong scrobble on Trakt
+    // and wants the plugin to detect it now instead of waiting for the
+    // periodic full-refresh interval.
+    this.addCommand({
+      id: "trakt-force-full-history-refresh",
+      name: t("cmd.forceFullHistoryRefresh"),
+      callback: async () => {
+        if (!this.settings.accessToken) {
+          new Notice(
+            getTranslator(this.settings.uiLanguage)("notice.notConnected"),
+          );
+          return;
+        }
+        await this.runSyncWithProgress({ forceFullHistoryRefresh: true });
+      },
+    });
+
+    // [0.2.0] Drop every TMDB cache entry. The next sync re-fetches
+    // metadata for every item from TMDB. Useful as a "refresh everything"
+    // escape hatch when the user notices stale titles / posters that
+    // outlast the configured TTL.
+    this.addCommand({
+      id: "trakt-clear-tmdb-cache",
+      name: t("cmd.clearTmdbCache"),
+      callback: async () => {
+        const tNow = getTranslator(this.settings.uiLanguage);
+        clearTmdbCache(this.settings.tmdbCache);
+        await this.saveSettings();
+        new Notice(tNow("tmdb.cache.clear.notice"));
+      },
+    });
+
     // Status bar — only shown transiently during sync
     this.statusBarEl = this.addStatusBarItem();
 
@@ -100,7 +145,9 @@ export default class TraktrPlugin extends Plugin {
    * it, tapping "Traktr: Sync" on iPhone looked like nothing was
    * happening for the entire duration of the sync.
    */
-  private async runSyncWithProgress(): Promise<void> {
+  private async runSyncWithProgress(
+    options: { forceFullHistoryRefresh?: boolean } = {},
+  ): Promise<void> {
     const tNow = getTranslator(this.settings.uiLanguage);
     const initialMsg = tNow("status.syncing");
     const progressNotice = new Notice(
@@ -112,7 +159,7 @@ export default class TraktrPlugin extends Plugin {
       await this.syncEngine.sync((msg) => {
         this.updateStatusBar(msg);
         progressNotice.setMessage(`${tNow("status.prefix")}${msg}`);
-      });
+      }, options);
     } finally {
       progressNotice.hide();
       this.updateStatusBar("");
@@ -121,11 +168,37 @@ export default class TraktrPlugin extends Plugin {
 
   async loadSettings() {
     const loaded = (await this.loadData()) as Partial<TraktrSettings> | null;
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded);
+    // [0.2.0] Mutate `this.settings` IN PLACE so SyncEngine's reference
+    // (set via the constructor) stays valid. Replacing the object would
+    // leave SyncEngine pointing at stale data.
+    Object.assign(this.settings, DEFAULT_SETTINGS, loaded);
   }
 
   async saveSettings() {
     await this.saveData(this.settings);
+  }
+
+  /**
+   * [0.2.0] Re-read data.json from disk and merge into the in-memory
+   * `this.settings`. Triggered when Obsidian becomes visible again, so
+   * settings + cache state synced from another device (Mac → iPhone via
+   * Obsidian Sync, etc.) are picked up without requiring a manual reload
+   * of the plugin.
+   *
+   * In-place mutation is essential — see loadSettings() comment.
+   */
+  private async refreshSettingsFromDisk(): Promise<void> {
+    try {
+      const fresh = (await this.loadData()) as Partial<TraktrSettings> | null;
+      // Wipe optional fields that may have been removed in the new state
+      // (e.g. someone cleared their TMDB cache on another device — we'd
+      // want this device to reflect that empty cache).
+      const stale = this.settings as unknown as Record<string, unknown>;
+      for (const k of Object.keys(stale)) delete stale[k];
+      Object.assign(this.settings, DEFAULT_SETTINGS, fresh);
+    } catch (e) {
+      console.warn("[Traktr] Failed to refresh settings from disk:", e);
+    }
   }
 
   /**

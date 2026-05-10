@@ -1,27 +1,40 @@
 import { requestUrl } from "obsidian";
 import type { PosterSize } from "./settings";
+import type {
+  TmdbCache,
+  TmdbCacheEntry,
+  TmdbTranslationData,
+} from "./types";
 
 const TMDB_BASE = "https://api.themoviedb.org/3";
 const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p";
 
-export interface TmdbTranslation {
-  title: string;
-  overview: string;
-  tagline: string;
-  genres: string[];
-}
+/**
+ * One day in ms. Used for TTL math + jitter.
+ */
+const ONE_DAY_MS = 86_400_000;
+
+/**
+ * Per-entry random jitter applied to TMDB cache TTL. With ±5 days, 1000+
+ * entries cached at the same time spread their expirations across a 10-day
+ * window, so revalidation load is steady instead of bursty.
+ */
+const TMDB_CACHE_JITTER_MS = 5 * ONE_DAY_MS;
+
+/**
+ * Sentinel used inside `expires_at` for entries that should never expire.
+ * Picked so that `Date.now() < expires_at` is always true within JS's safe
+ * integer range (year ~275760).
+ */
+const NEVER_EXPIRES = Number.MAX_SAFE_INTEGER;
+
+export type TmdbTranslation = TmdbTranslationData;
 
 export interface TmdbMetadata {
   poster_url: string;
   translation: TmdbTranslation | null;
 }
 
-/**
- * Shape of a single entry inside the `translations.translations[]` array
- * returned by `?append_to_response=translations`. The `data` block is what we
- * actually consume — fields are sometimes empty strings when a translation
- * row has been moderated as "no value yet" on TMDB.
- */
 interface TmdbTranslationEntry {
   iso_639_1: string;
   iso_3166_1: string;
@@ -45,13 +58,84 @@ interface TmdbMovieResponse {
   translations?: { translations: TmdbTranslationEntry[] };
 }
 
+/**
+ * Compose the cache key for an item. Mirrors spec 0001 §A "Storage". Type
+ * disambiguates movie vs show with the same TMDB id; language gives each
+ * locale its own slot (so switching from `zh-CN` to `ja-JP` is a clean
+ * cache miss for ja-JP, not a wrong cache hit).
+ */
+export function tmdbCacheKey(
+  mediaType: "movie" | "tv",
+  tmdbId: number,
+  language: string,
+): string {
+  return `${mediaType}:${tmdbId}:${language || "default"}`;
+}
+
+/**
+ * Compute when a freshly written cache entry should expire.
+ *
+ * - `ttlDays === 0` → never expire (`Number.MAX_SAFE_INTEGER`)
+ * - otherwise → `now + ttlDays + uniformRandom(±5 days)`, clamped to ≥ 1 day
+ */
+export function computeCacheExpiry(ttlDays: number, now = Date.now()): number {
+  if (ttlDays <= 0) return NEVER_EXPIRES;
+  const baseMs = ttlDays * ONE_DAY_MS;
+  const jitterMs = (Math.random() - 0.5) * 2 * TMDB_CACHE_JITTER_MS;
+  return now + Math.max(ONE_DAY_MS, baseMs + jitterMs);
+}
+
+/**
+ * Pure-data check: is a given entry fresh, stale, or fully expired? Pulled
+ * out of the fetch path so smoke tests can verify staleness logic without
+ * mocking time-of-day.
+ */
+export function cacheEntryFreshness(
+  entry: TmdbCacheEntry | undefined,
+  now = Date.now(),
+): "missing" | "fresh" | "stale" {
+  if (!entry) return "missing";
+  return entry.expires_at > now ? "fresh" : "stale";
+}
+
+/**
+ * Background revalidations are tracked here so that two concurrent fetches
+ * for the same key don't issue duplicate API calls. Cleared when a
+ * revalidation finishes (success or failure).
+ */
+const inFlightRevalidations = new Set<string>();
+
+/**
+ * Public entry point. Always cache-aware; see header comment in spec 0001
+ * §A "Lazy revalidation". Behavior:
+ *
+ *   - cache hit + fresh    → return cached, no API call
+ *   - cache hit + stale    → return cached immediately, fire-and-forget
+ *                             a background fetch that updates the cache on
+ *                             success (silently keeps stale on failure)
+ *   - cache miss           → fetch synchronously, write the result, return
+ *
+ * The `cache` parameter is mutated in place — caller is expected to
+ * `saveSettings()` after the surrounding sync run completes. We don't save
+ * per-call to avoid serializing data.json hundreds of times during one sync.
+ */
 export async function fetchMovieMetadata(
   tmdbId: number,
   apiKey: string,
   size: PosterSize,
   language: string,
+  cache: TmdbCache,
+  ttlDays: number,
 ): Promise<TmdbMetadata> {
-  return fetchTmdbMetadata("movie", tmdbId, apiKey, size, language);
+  return fetchTmdbMetadataCached(
+    "movie",
+    tmdbId,
+    apiKey,
+    size,
+    language,
+    cache,
+    ttlDays,
+  );
 }
 
 export async function fetchTvMetadata(
@@ -59,38 +143,149 @@ export async function fetchTvMetadata(
   apiKey: string,
   size: PosterSize,
   language: string,
+  cache: TmdbCache,
+  ttlDays: number,
 ): Promise<TmdbMetadata> {
-  return fetchTmdbMetadata("tv", tmdbId, apiKey, size, language);
+  return fetchTmdbMetadataCached(
+    "tv",
+    tmdbId,
+    apiKey,
+    size,
+    language,
+    cache,
+    ttlDays,
+  );
+}
+
+async function fetchTmdbMetadataCached(
+  mediaType: "movie" | "tv",
+  tmdbId: number,
+  apiKey: string,
+  size: PosterSize,
+  language: string,
+  cache: TmdbCache,
+  ttlDays: number,
+): Promise<TmdbMetadata> {
+  const key = tmdbCacheKey(mediaType, tmdbId, language);
+  const entry = cache[key];
+  const freshness = cacheEntryFreshness(entry);
+
+  if (freshness === "fresh" && entry) {
+    // Hot path: every steady-state sync hits this for items we've already
+    // seen. Zero API calls, zero await of network.
+    return { poster_url: entry.poster_url, translation: entry.translation };
+  }
+
+  if (freshness === "stale" && entry) {
+    // Stale-while-revalidate: serve the cached value now, fire a
+    // background fetch that updates the cache on success. If the
+    // background fetch fails, the stale entry stays — user sees old data
+    // until the next successful revalidation, but never sees an empty.
+    if (!inFlightRevalidations.has(key)) {
+      inFlightRevalidations.add(key);
+      void revalidateInBackground(
+        mediaType,
+        tmdbId,
+        apiKey,
+        size,
+        language,
+        cache,
+        ttlDays,
+        key,
+      );
+    }
+    return { poster_url: entry.poster_url, translation: entry.translation };
+  }
+
+  // Miss → fetch synchronously, write to cache.
+  const fresh = await fetchTmdbMetadata(
+    mediaType,
+    tmdbId,
+    apiKey,
+    size,
+    language,
+  );
+  // Only cache successful fetches. A response that's both empty AND has no
+  // poster suggests TMDB returned an error or we got rate-limited; we'd
+  // rather retry next time than cache a placeholder.
+  if (fresh.poster_url || fresh.translation || !language) {
+    cache[key] = {
+      poster_url: fresh.poster_url,
+      translation: fresh.translation,
+      cached_at: Date.now(),
+      expires_at: computeCacheExpiry(ttlDays),
+    };
+  }
+  return fresh;
+}
+
+async function revalidateInBackground(
+  mediaType: "movie" | "tv",
+  tmdbId: number,
+  apiKey: string,
+  size: PosterSize,
+  language: string,
+  cache: TmdbCache,
+  ttlDays: number,
+  key: string,
+): Promise<void> {
+  try {
+    const fresh = await fetchTmdbMetadata(
+      mediaType,
+      tmdbId,
+      apiKey,
+      size,
+      language,
+    );
+    if (fresh.poster_url || fresh.translation || !language) {
+      cache[key] = {
+        poster_url: fresh.poster_url,
+        translation: fresh.translation,
+        cached_at: Date.now(),
+        expires_at: computeCacheExpiry(ttlDays),
+      };
+    }
+    // Else: revalidation came back empty. Keep the existing stale entry.
+  } catch (e) {
+    console.warn(
+      `TMDB background revalidation failed for ${key}; keeping stale entry`,
+      e,
+    );
+  } finally {
+    inFlightRevalidations.delete(key);
+  }
 }
 
 /**
- * Fetch poster URL + (when language is non-empty) localized title / overview
- * / tagline / genres for a movie or TV show by its TMDB ID.
- *
- * Implementation notes (resolves two known TMDB API quirks the user reported):
- *
- * 1. **Title can fall back to English even when a Chinese page exists.** TMDB
- *    moderators sometimes lock the `title` field on a `zh-CN` translation row
- *    to blank — typically for movies without an official mainland release.
- *    The API does NOT auto-fall-back to other Chinese variants (zh-TW /
- *    zh-HK / zh-SG) when this happens; it returns the English original. The
- *    website *does* fall back, which is why you see Chinese titles there but
- *    English titles in the API.
- *
- *    Fix: append `translations` to the response and walk the
- *    `translations.translations[]` array client-side. Pick the best non-empty
- *    variant in the user's language family (e.g. for `zh-CN` we try CN → TW
- *    → HK → SG → any other zh entry).
- *
- * 2. **Poster path can be null when language doesn't have a localized
- *    poster.** Same root cause as #1 — the API does not transparently fall
- *    back to the default poster.
- *
- *    Fix: when `poster_path` comes back null AND a language was specified,
- *    retry the request without the `language` parameter. That second call
- *    only fires for items missing a localized poster — most items don't pay
- *    this cost.
+ * Drop every TMDB cache entry. Exposed so the settings UI button +
+ * `Traktr: Clear TMDB cache` command can wire to the same call.
  */
+export function clearTmdbCache(cache: TmdbCache): void {
+  for (const k of Object.keys(cache)) delete cache[k];
+}
+
+/**
+ * Cache observability for the settings UI. Returns the entry count + a
+ * rough byte estimate for the description ("3,127 entries, ~1.5 MB").
+ */
+export function tmdbCacheStats(cache: TmdbCache): {
+  entries: number;
+  approxBytes: number;
+} {
+  const entries = Object.keys(cache).length;
+  // Each entry is roughly: key string (40 chars) + 5 fields. Real measure
+  // would require JSON.stringify which is expensive on large caches; this
+  // estimate is good enough for UI rendering and avoids the perf hit.
+  const approxBytes = entries * 500;
+  return { entries, approxBytes };
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Below: the original (non-cached) fetch path, plus the translation
+// picker. Internal — public callers go through fetchMovieMetadata /
+// fetchTvMetadata which handle caching automatically.
+// ─────────────────────────────────────────────────────────────────────
+
 async function fetchTmdbMetadata(
   mediaType: "movie" | "tv",
   tmdbId: number,
@@ -121,10 +316,9 @@ async function fetchTmdbMetadata(
     const data = resp.json as TmdbMovieResponse;
     let posterPath = data.poster_path;
 
-    // Poster fallback: if the language-specific request returned null and we
-    // had a language set, fetch the default poster (no language filter). One
-    // extra call, but only for items where the localized request didn't have
-    // a poster — for most items this branch never runs.
+    // Poster fallback: if a language-specific request returned null, retry
+    // without `language` to get the default poster. One extra call only
+    // for items where the localized request didn't have a poster.
     if (language && !posterPath) {
       try {
         const fbParams = new URLSearchParams({ api_key: apiKey });
@@ -163,28 +357,9 @@ async function fetchTmdbMetadata(
 }
 
 /**
- * Pick the best-fit translation for a movie or TV item given the user's
- * requested BCP 47 code. Strategy:
- *
- * 1. If the main response already has a non-empty title that DIFFERS from
- *    the original title (and the user's language is not the original's
- *    language), trust it — TMDB returned a real localized title.
- *    We still merge in the translations array for any field the main
- *    response has empty (overview/tagline can be selectively blank).
- *
- * 2. Otherwise (main response title fell back to English), search
- *    `translations.translations[]` for the best variant in the user's
- *    language family. For `zh-CN` we walk CN → TW → HK → SG → any zh.
- *    For other languages, exact country first, then any country-less or
- *    other-country entry.
- *
- * 3. If nothing matches, return null — caller will keep originals.
- *
- * NOTE: the translations array's per-locale `data` block does NOT include
- * genres. So genre localization comes from the main response only. If the
- * main response is fully English (zh-CN locked blank), genres will also be
- * English. Acceptable trade-off — genre names are short and the user can
- * read both languages, while title is the user's primary concern.
+ * Walk the translations array client-side to find the best variant in the
+ * user's language family. Workaround for TMDB's documented "title locked
+ * blank for zh-CN" quirk — see spec 0001 §Context for details.
  */
 export function pickBestTranslation(
   data: TmdbMovieResponse,
@@ -202,13 +377,9 @@ export function pickBestTranslation(
     .map((g) => (g.name || "").trim())
     .filter((n) => n.length > 0);
 
-  // The main response is "fully localized" when title is non-empty AND
-  // differs from the original title — that's a strong signal that TMDB had a
-  // real translation registered for the requested language.
   const mainLooksLocalized =
     mainTitle.length > 0 && mainTitle !== mainOriginal;
 
-  // Build a candidate list from the translations array, ordered by best fit.
   const candidates = orderCandidates(
     data.translations?.translations || [],
     language,
@@ -232,8 +403,6 @@ export function pickBestTranslation(
   };
 
   if (mainLooksLocalized) {
-    // Trust the main response, fall back to translations only where main is
-    // empty (TMDB sometimes has title localized but overview blank, etc.).
     return {
       title: mainTitle,
       overview: mainOverview || fromCandidate("overview"),
@@ -242,8 +411,6 @@ export function pickBestTranslation(
     };
   }
 
-  // Main response is the English fallback. Use translations array exclusively
-  // for title/overview/tagline; genres still come from main (English).
   const candidateTitle = fromCandidate("title");
   const candidateOverview = fromCandidate("overview");
   const candidateTagline = fromCandidate("tagline");
@@ -253,7 +420,6 @@ export function pickBestTranslation(
     candidateOverview.length === 0 &&
     candidateTagline.length === 0
   ) {
-    // No usable translation in the user's language family.
     return null;
   }
 
@@ -265,12 +431,6 @@ export function pickBestTranslation(
   };
 }
 
-/**
- * Order the translations array by how well each entry matches the requested
- * BCP 47 code. Same-language entries come first; within them, exact-country
- * match wins, then a language-specific fallback chain (defined for `zh`),
- * then any same-language entry, then nothing else.
- */
 function orderCandidates(
   all: ReadonlyArray<TmdbTranslationEntry>,
   language: string,
@@ -285,11 +445,6 @@ function orderCandidates(
   );
   if (sameLang.length === 0) return [];
 
-  // Country fallback chain — gives deterministic ordering within a language
-  // family. For `zh` we use the well-known CN → TW → HK → SG progression
-  // (Simplified mainland → Traditional Taiwan → Traditional HK → Simplified
-  // Singapore). For other languages we have no strong intuition, so we
-  // fall through to "exact country first, then anything else".
   const familyFallback: Record<string, string[]> = {
     zh: ["CN", "TW", "HK", "SG"],
     en: ["US", "GB", "AU", "CA"],
@@ -304,13 +459,10 @@ function orderCandidates(
   }
 
   const ranked: TmdbTranslationEntry[] = [];
-  // First: country-priority order.
   for (const c of ordered) {
     const match = sameLang.find((t) => t.iso_3166_1 === c);
     if (match) ranked.push(match);
   }
-  // Then: any other same-language entries we haven't ranked yet, in their
-  // original order from the API.
   for (const t of sameLang) {
     if (!ranked.includes(t)) ranked.push(t);
   }

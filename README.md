@@ -16,6 +16,7 @@
 - **Detailed watch history** — exactly which episode you watched at what time, including re-watches, kept in sync as you keep watching
 - **Localized metadata** — translate titles / overviews / taglines / genres via TMDB; English originals always preserved alongside
 - **Bilingual UI** — settings, commands, and notices in English or 简体中文; bundled note templates in en / zh-CN / zh-TW
+- **Fast incremental sync** _(0.2.0)_ — first sync seeds the local TMDB cache + Trakt history state; subsequent syncs only fetch what changed. Steady-state sync time drops from minutes to single-digit seconds. See [spec 0001](docs/specs/0001-incremental-sync.md)
 
 ## 🎬 Detailed watch history
 

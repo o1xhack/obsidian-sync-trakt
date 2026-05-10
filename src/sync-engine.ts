@@ -15,7 +15,6 @@ import type {
   TraktShow,
   TraktIds,
   ItemType,
-  EpisodeWatchHistory,
 } from "./types";
 import {
   fetchWatchlist,
@@ -40,6 +39,13 @@ import {
   parseFrontmatter,
   processWithConcurrency,
 } from "./utils";
+import {
+  applyHistoryStateToItems,
+  getIncrementalStartAt,
+  mergeHistoryEvents,
+  replaceFromFullRefresh,
+  shouldRunFullRefresh,
+} from "./history-state";
 
 /**
  * Cap on simultaneous TMDB requests during a sync. Keeps the user's CPU /
@@ -148,90 +154,17 @@ function itemKey(type: ItemType, traktId: number): string {
 
 // ── Watch history aggregation ──
 //
-// Both helpers walk a /sync/history page and group its rows by item id. They
-// only ATTACH timestamps to items already present in the merged map — so an
-// item the user has watched but doesn't have via watchlist/watched/favorite/
-// rating won't accidentally get a note created. (In practice anyone calling
-// fetchHistory has syncWatched on, which already populates the map from
-// `/sync/watched/*`.)
-
-function chronologicalSort(timestamps: string[]): string[] {
-  // ISO-8601 strings sort lexicographically the same as chronologically when
-  // they all share the same offset (Trakt uses UTC `Z`), so a plain string
-  // sort is safe and avoids new Date() per element.
-  return [...timestamps].sort();
-}
-
-export function aggregateMovieHistory(
-  history: ReadonlyArray<TraktHistoryItem>,
-  map: Map<string, NormalizedItem>,
-): void {
-  // Group all "movie" history rows by trakt id.
-  const byTraktId = new Map<number, string[]>();
-  for (const row of history) {
-    if (row.type !== "movie" || !row.movie) continue;
-    const traktId = row.movie.ids.trakt;
-    const list = byTraktId.get(traktId);
-    if (list) list.push(row.watched_at);
-    else byTraktId.set(traktId, [row.watched_at]);
-  }
-  for (const [traktId, timestamps] of byTraktId) {
-    const item = map.get(itemKey("movie", traktId));
-    if (!item) continue;
-    item.watch_history_movie = chronologicalSort(timestamps);
-  }
-}
-
-export function aggregateShowHistory(
-  history: ReadonlyArray<TraktHistoryItem>,
-  map: Map<string, NormalizedItem>,
-): void {
-  // Group "episode" rows by show trakt id, then within each show by S/E.
-  // Each (show, season, episode) accumulates the list of watched_at strings.
-  const byShow = new Map<number, Map<string, EpisodeWatchHistory>>();
-  for (const row of history) {
-    if (row.type !== "episode" || !row.show || !row.episode) continue;
-    const showId = row.show.ids.trakt;
-    const seKey = `${row.episode.season}:${row.episode.number}`;
-
-    let perEpisode = byShow.get(showId);
-    if (!perEpisode) {
-      perEpisode = new Map();
-      byShow.set(showId, perEpisode);
-    }
-    let entry = perEpisode.get(seKey);
-    if (!entry) {
-      entry = {
-        season: row.episode.season,
-        episode: row.episode.number,
-        title: row.episode.title,
-        watched_at: [],
-      };
-      perEpisode.set(seKey, entry);
-    }
-    entry.watched_at.push(row.watched_at);
-  }
-
-  for (const [showId, perEpisode] of byShow) {
-    const item = map.get(itemKey("show", showId));
-    if (!item) continue;
-    const episodes: EpisodeWatchHistory[] = [];
-    for (const entry of perEpisode.values()) {
-      episodes.push({
-        season: entry.season,
-        episode: entry.episode,
-        title: entry.title,
-        watched_at: chronologicalSort(entry.watched_at),
-      });
-    }
-    // Stable order: by season ascending, then episode ascending. Lets the
-    // template render `S1E1, S1E2, …, S2E1` predictably.
-    episodes.sort(
-      (a, b) => a.season - b.season || a.episode - b.episode,
-    );
-    item.watch_history_episodes = episodes;
-  }
-}
+// As of 0.2.0 this is a thin wrapper over `history-state.ts`. The previous
+// in-memory aggregateMovieHistory / aggregateShowHistory functions were
+// recomputed from a full Trakt history fetch every sync. They've been
+// replaced by a persistent `HistoryState` object that:
+//
+//   1. Carries an aggregated form of every event we've ever seen
+//   2. Supports incremental fetch via `?start_at=lastIncrementalSyncAt`
+//   3. Triggers a periodic full refresh to detect deletions
+//
+// See spec 0001 for the design rationale and history-state.ts for the
+// merge / replace operations.
 
 function getOrCreateItem(
   map: Map<string, NormalizedItem>,
@@ -326,7 +259,10 @@ export class SyncEngine {
     this.saveSettings = saveSettings;
   }
 
-  async sync(onProgress?: SyncProgress): Promise<SyncResult> {
+  async sync(
+    onProgress?: SyncProgress,
+    options: { forceFullHistoryRefresh?: boolean } = {},
+  ): Promise<SyncResult> {
     const t = getTranslator(this.settings.uiLanguage);
     if (this.syncing) {
       new Notice(t("notice.alreadySyncing"));
@@ -347,8 +283,8 @@ export class SyncEngine {
       // 1. Ensure valid token
       await ensureValidToken(this.settings, this.saveSettings);
 
-      // 2. Fetch from all enabled sources in parallel, merging into a single
-      //    map keyed by "type:trakt_id" to avoid cross-type ID collisions.
+      // 2. Fetch list endpoints in parallel; populate the merged map.
+      //    Each (movie / show) source is independent of detailed history.
       onProgress?.(t("progress.fetchingTrakt"));
       const merged = new Map<string, NormalizedItem>();
 
@@ -357,13 +293,31 @@ export class SyncEngine {
         this.settings.syncShows ? this.fetchAndMergeShows(merged) : Promise.resolve(),
       ]);
 
-      // 3. Ensure tag note files exist
+      // 3. Detailed watch history (incremental or periodic full refresh).
+      //    Updates the persistent historyState in `this.settings`. Skipped
+      //    entirely when syncWatched / syncWatchedDetail is off.
+      if (this.settings.syncWatched && this.settings.syncWatchedDetail) {
+        await this.syncDetailHistory(
+          options.forceFullHistoryRefresh === true,
+          onProgress,
+        );
+      }
+
+      // 4. Apply persistent history state to in-memory items so the note
+      //    renderer sees the watch_history_* fields.
+      applyHistoryStateToItems(this.settings.historyState, merged.values());
+
+      // 5. Ensure tag note files exist
       await this.ensureTagNotes(merged);
 
-      // 4. Reconcile all items into the single notes folder
+      // 6. Reconcile all items into the single notes folder
       await this.reconcileType(merged, result, onProgress);
 
-      // 5. Show result
+      // 7. Persist any state mutations (TMDB cache writes, history state
+      //    updates) so they survive across sessions and across devices.
+      await this.saveSettings();
+
+      // 8. Show result
       console.debug(`[Traktr] Sync complete — added: ${result.added}, updated: ${result.updated}, removed: ${result.removed}, failed: ${result.failed}`);
       let msg = t("notice.syncComplete", {
         added: result.added,
@@ -440,28 +394,25 @@ export class SyncEngine {
   }
 
   /**
-   * Fetch from all enabled sources for movies in parallel and merge into map.
+   * Fetch from all enabled list sources for movies and merge into map.
+   * Detailed history is handled separately by `syncDetailHistory()` so its
+   * full vs incremental decision is made once across both types.
    */
   private async fetchAndMergeMovies(
     map: Map<string, NormalizedItem>
   ): Promise<void> {
     const { clientId, accessToken } = this.settings;
-    // syncWatchedDetail is gated behind syncWatched so we never fetch a huge
-    // history list for someone who hasn't even opted into watch sync.
-    const fetchDetail = this.settings.syncWatched && this.settings.syncWatchedDetail;
 
     const [
       watchlistItems,
       watchedItems,
       favoriteItems,
       ratingItems,
-      historyItems,
     ] = await Promise.all([
       this.settings.syncWatchlist ? fetchWatchlist("movies", clientId, accessToken) : Promise.resolve([] as TraktWatchlistItem[]),
       this.settings.syncWatched ? fetchWatchedMovies(clientId, accessToken) : Promise.resolve([] as TraktWatchedMovieItem[]),
       this.settings.syncFavorites ? fetchFavorites("movies", clientId, accessToken) : Promise.resolve([] as TraktFavoriteItem[]),
       this.settings.syncRatings ? fetchRatings("movies", clientId, accessToken) : Promise.resolve([] as TraktRatingItem[]),
-      fetchDetail ? fetchHistory("movies", clientId, accessToken) : Promise.resolve([] as TraktHistoryItem[]),
     ]);
 
     for (const raw of watchlistItems) {
@@ -491,31 +442,27 @@ export class SyncEngine {
       item.my_rating = raw.rating;
       item.rated_at = raw.rated_at;
     }
-
-    if (fetchDetail) aggregateMovieHistory(historyItems, map);
   }
 
   /**
-   * Fetch from all enabled sources for shows in parallel and merge into map.
+   * Fetch from all enabled list sources for shows and merge into map.
+   * Detailed history is handled separately by `syncDetailHistory()`.
    */
   private async fetchAndMergeShows(
     map: Map<string, NormalizedItem>
   ): Promise<void> {
     const { clientId, accessToken } = this.settings;
-    const fetchDetail = this.settings.syncWatched && this.settings.syncWatchedDetail;
 
     const [
       watchlistItems,
       watchedItems,
       favoriteItems,
       ratingItems,
-      historyItems,
     ] = await Promise.all([
       this.settings.syncWatchlist ? fetchWatchlist("shows", clientId, accessToken) : Promise.resolve([] as TraktWatchlistItem[]),
       this.settings.syncWatched ? fetchWatchedShows(clientId, accessToken) : Promise.resolve([] as TraktWatchedShowItem[]),
       this.settings.syncFavorites ? fetchFavorites("shows", clientId, accessToken) : Promise.resolve([] as TraktFavoriteItem[]),
       this.settings.syncRatings ? fetchRatings("shows", clientId, accessToken) : Promise.resolve([] as TraktRatingItem[]),
-      fetchDetail ? fetchHistory("episodes", clientId, accessToken) : Promise.resolve([] as TraktHistoryItem[]),
     ]);
 
     for (const raw of watchlistItems) {
@@ -551,8 +498,60 @@ export class SyncEngine {
       item.my_rating = raw.rating;
       item.rated_at = raw.rated_at;
     }
+  }
 
-    if (fetchDetail) aggregateShowHistory(historyItems, map);
+  /**
+   * Pull detailed watch history from Trakt and update the persistent
+   * `historyState`. Decides incremental vs full refresh based on
+   * `lastFullRefreshAt` + the configured interval.
+   *
+   *   - **Incremental** (fast path): `?start_at=lastIncrementalSyncAt`,
+   *     append new events into state via `mergeHistoryEvents`. Typical
+   *     weekly catch-up = 1 page = 1 API call.
+   *   - **Full refresh** (slow path): no `start_at`, pull everything,
+   *     `replaceFromFullRefresh` rebuilds state from scratch and detects
+   *     deletions by diffing against `knownEventIds`.
+   *
+   * Caller is `sync()`. Both movie and episode history are fetched in
+   * parallel; their events go into the same shared state object (which
+   * has separate `byMovie` and `byShow` maps internally).
+   */
+  private async syncDetailHistory(
+    forceFullRefresh: boolean,
+    onProgress?: SyncProgress,
+  ): Promise<void> {
+    const t = getTranslator(this.settings.uiLanguage);
+    const state = this.settings.historyState;
+    const interval = this.settings.historyFullRefreshIntervalDays;
+    const fullRefresh =
+      forceFullRefresh || shouldRunFullRefresh(state, interval);
+    const startAt = fullRefresh ? "" : getIncrementalStartAt(state);
+
+    onProgress?.(
+      t(
+        fullRefresh
+          ? "progress.fullHistoryRefresh"
+          : "progress.fetchingTraktHistory",
+      ),
+    );
+
+    const { clientId, accessToken } = this.settings;
+    const [movieEvents, episodeEvents] = await Promise.all([
+      this.settings.syncMovies
+        ? fetchHistory("movies", clientId, accessToken, startAt)
+        : Promise.resolve([] as TraktHistoryItem[]),
+      this.settings.syncShows
+        ? fetchHistory("episodes", clientId, accessToken, startAt)
+        : Promise.resolve([] as TraktHistoryItem[]),
+    ]);
+
+    const all = [...movieEvents, ...episodeEvents];
+
+    if (fullRefresh) {
+      replaceFromFullRefresh(state, all);
+    } else {
+      mergeHistoryEvents(state, all);
+    }
   }
 
   /**
@@ -624,11 +623,16 @@ export class SyncEngine {
           }
           const fetcher =
             item.type === "movie" ? fetchMovieMetadata : fetchTvMetadata;
+          // Cache layer is inside the fetcher: hits return immediately,
+          // misses fetch + write through. Stale entries are returned with
+          // a fire-and-forget background revalidation. See spec 0001 §A.
           const meta = await fetcher(
             item.ids.tmdb,
             this.settings.tmdbApiKey,
             this.settings.posterSize,
             language,
+            this.settings.tmdbCache,
+            this.settings.tmdbCacheTtlDays,
           );
           item.poster_url = meta.poster_url;
           if (meta.translation) {

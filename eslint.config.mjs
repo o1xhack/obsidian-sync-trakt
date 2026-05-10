@@ -13,6 +13,8 @@ export default defineConfig([
         console: "readonly",
         window: "readonly",
         navigator: "readonly",
+        document: "readonly",
+        setTimeout: "readonly",
       },
     },
   },

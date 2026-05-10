@@ -158,6 +158,66 @@ export interface EpisodeWatchHistory {
   watched_at: string[];
 }
 
+/**
+ * Persistent aggregated state for the detailed watch history. Lives in
+ * `data.json` under `settings.historyState`. See spec 0001 for design.
+ *
+ * - `byMovie` / `byShow`: ready-to-render aggregations keyed by Trakt id.
+ * - `knownEventIds`: every individual watch-event id we've ingested. Used
+ *   on full refresh to detect deletions (events present here but absent
+ *   from the new full pull were deleted on Trakt).
+ * - `lastIncrementalSyncAt`: ISO-8601. Next sync queries
+ *   `/sync/history?start_at=<this>`. Empty string means we haven't
+ *   incrementally synced yet — caller should treat that as "do a full
+ *   pull this time."
+ * - `lastFullRefreshAt`: ISO-8601. When `now - this >
+ *   historyFullRefreshIntervalDays`, the next sync triggers a full pull
+ *   to catch deletions.
+ */
+export interface HistoryState {
+  byMovie: { [traktMovieId: number]: string[] };
+  byShow: { [traktShowId: number]: EpisodeWatchHistory[] };
+  knownEventIds: number[];
+  lastIncrementalSyncAt: string;
+  lastFullRefreshAt: string;
+}
+
+export const EMPTY_HISTORY_STATE: HistoryState = {
+  byMovie: {},
+  byShow: {},
+  knownEventIds: [],
+  lastIncrementalSyncAt: "",
+  lastFullRefreshAt: "",
+};
+
+/**
+ * Single TMDB cache entry. Stored under `settings.tmdbCache[key]` where
+ * `key` is `${type}:${tmdbId}:${language || 'default'}`.
+ *
+ * `expires_at` includes a per-entry random jitter so 1000+ entries
+ * cached at once don't all expire on the same day — see spec 0001.
+ */
+export interface TmdbCacheEntry {
+  poster_url: string;
+  translation: TmdbTranslationData | null;
+  cached_at: number;
+  expires_at: number;
+}
+
+/** Cached form of a TMDB translation. Mirrors `TmdbTranslation` from
+ * tmdb-api.ts but lives here in types.ts so the cache's data shape is
+ * declared independently of the API client. */
+export interface TmdbTranslationData {
+  title: string;
+  overview: string;
+  tagline: string;
+  genres: string[];
+}
+
+export interface TmdbCache {
+  [key: string]: TmdbCacheEntry;
+}
+
 export interface NormalizedItem {
   type: ItemType;
   title: string;

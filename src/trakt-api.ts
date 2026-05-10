@@ -285,22 +285,32 @@ export async function fetchRatings(
 }
 
 /**
- * Fetch the user's complete watch history for a given type. Each entry in
- * the response represents ONE watch event (so re-watches generate multiple
- * entries with the same movie/episode ids). Used to render per-watch
- * timestamps in the note body when `syncWatchedDetail` is enabled.
+ * Fetch the user's watch history for a given type. Each entry represents
+ * ONE individual watch event (re-watches → multiple entries with the same
+ * movie / episode ids).
  *
- * Note: this endpoint can be very large for active users (one entry per
- * episode watched, ever). It's gated behind a separate setting for that
- * reason.
+ * When `startAt` is provided (ISO-8601), only events at or after that
+ * timestamp are returned — the basis of incremental sync (spec 0001).
+ * When omitted, returns the user's full history (slow, paginated; used
+ * for periodic full refresh + the very first sync).
+ *
+ * Without a `start_at` filter, an active user with thousands of events
+ * generates ~150 paginated calls. With it, a typical week's gap is
+ * ~1 page. Always called via this function so the spec-mandated
+ * `start_at` semantics are encapsulated in one place.
  */
 export async function fetchHistory(
   type: "movies" | "episodes",
   clientId: string,
   accessToken: string,
+  startAt?: string,
 ): Promise<TraktHistoryItem[]> {
+  const path =
+    startAt && startAt.length > 0
+      ? `/sync/history/${type}?start_at=${encodeURIComponent(startAt)}`
+      : `/sync/history/${type}`;
   return fetchPaginated<TraktHistoryItem>(
-    `/sync/history/${type}`,
+    path,
     clientId,
     accessToken,
     `History ${type}`,

@@ -16,6 +16,7 @@
 - **Cronologia di visione dettagliata** — esattamente quale episodio hai visto e quando, comprese le rivisioni, sincronizzato man mano che continui a guardare
 - **Metadati localizzati** — traduzione di titoli / sinossi / tagline / generi via TMDB; gli originali in inglese vengono sempre conservati a fianco
 - **Interfaccia bilingue** — impostazioni, comandi e notifiche in English o 简体中文; modelli di nota integrati in en / zh-CN / zh-TW
+- **Sincronizzazione incrementale** _(0.2.0)_ — la prima sincronizzazione popola la cache TMDB locale e lo stato della cronologia Trakt; le sincronizzazioni successive recuperano solo ciò che è cambiato. Il tempo di sincronizzazione a regime scende da minuti a secondi. Vedi [spec 0001](../specs/0001-incremental-sync.md)
 
 ## 🎬 Cronologia di visione dettagliata
 

@@ -24,13 +24,33 @@ import {
   pickTraktTranslation,
   type TraktTranslation,
 } from "../src/trakt-api";
-import { pickBestTranslation } from "../src/tmdb-api";
 import {
-  aggregateMovieHistory,
-  aggregateShowHistory,
-} from "../src/sync-engine";
+  pickBestTranslation,
+  cacheEntryFreshness,
+  computeCacheExpiry,
+  tmdbCacheKey,
+  clearTmdbCache,
+  tmdbCacheStats,
+  fetchMovieMetadata,
+} from "../src/tmdb-api";
+import {
+  mergeHistoryEvents,
+  replaceFromFullRefresh,
+  shouldRunFullRefresh,
+  applyHistoryStateToItems,
+  clearHistoryState,
+  historyStateStats,
+  stateFromEvents,
+  getIncrementalStartAt,
+} from "../src/history-state";
 import { processWithConcurrency } from "../src/utils";
-import type { TraktHistoryItem } from "../src/types";
+import {
+  EMPTY_HISTORY_STATE,
+  type HistoryState,
+  type TmdbCache,
+  type TmdbCacheEntry,
+  type TraktHistoryItem,
+} from "../src/types";
 import {
   DEFAULT_SETTINGS,
   DEFAULT_MOVIE_TEMPLATE_EN,
@@ -509,149 +529,233 @@ console.log("\n[10] DEFAULT_SETTINGS still produces English UI + EN templates");
   );
 }
 
-// ── Test 11: Watch history aggregation (movies) ───────────────────────────
+// ── Test 11: mergeHistoryEvents — additive merge (movie + show) ───────────
 console.log(
-  "\n[11] aggregateMovieHistory groups + sorts re-watches per movie id",
+  "\n[11] mergeHistoryEvents groups movies + episodes into HistoryState",
 );
 {
-  // Fixture: 3 history entries — Inception watched twice (2024-06 + 2025-02),
-  // The Dark Knight watched once. The 2024-06 entry comes AFTER 2025-02 in
-  // input order to confirm the helper sorts chronologically.
+  // Movies: Inception watched twice (out of chronological order in input,
+  // to verify the function sorts on output). The Dark Knight once.
+  // Episodes: same show, S1E1 watched twice, S1E2 once, S2E1 once.
   const history: TraktHistoryItem[] = [
-    {
-      id: 1,
-      watched_at: "2025-02-14T20:15:00.000Z",
-      action: "watch",
-      type: "movie",
-      movie: { title: "Inception", year: 2010, ids: { trakt: 1, slug: "inception-2010" } },
-    },
-    {
-      id: 2,
-      watched_at: "2024-06-10T22:30:00.000Z",
-      action: "watch",
-      type: "movie",
-      movie: { title: "Inception", year: 2010, ids: { trakt: 1, slug: "inception-2010" } },
-    },
-    {
-      id: 3,
-      watched_at: "2024-01-15T21:30:00.000Z",
-      action: "watch",
-      type: "movie",
-      movie: { title: "The Dark Knight", year: 2008, ids: { trakt: 4, slug: "the-dark-knight-2008" } },
-    },
+    { id: 1, watched_at: "2025-02-14T20:15:00.000Z", action: "watch", type: "movie",
+      movie: { title: "Inception", year: 2010, ids: { trakt: 1, slug: "inception-2010" } } },
+    { id: 2, watched_at: "2024-06-10T22:30:00.000Z", action: "watch", type: "movie",
+      movie: { title: "Inception", year: 2010, ids: { trakt: 1, slug: "inception-2010" } } },
+    { id: 3, watched_at: "2024-01-15T21:30:00.000Z", action: "watch", type: "movie",
+      movie: { title: "The Dark Knight", year: 2008, ids: { trakt: 4, slug: "tdk" } } },
+    { id: 10, watched_at: "2024-04-02T20:00:00.000Z", action: "watch", type: "episode",
+      show: { title: "Show", year: 2020, ids: { trakt: 99, slug: "show-2020" } },
+      episode: { season: 2, number: 1, title: "S2E1 title", ids: { trakt: 9911 } } },
+    { id: 11, watched_at: "2024-01-15T21:30:00.000Z", action: "watch", type: "episode",
+      show: { title: "Show", year: 2020, ids: { trakt: 99, slug: "show-2020" } },
+      episode: { season: 1, number: 1, title: "Pilot", ids: { trakt: 9901 } } },
+    { id: 12, watched_at: "2024-03-22T19:00:00.000Z", action: "watch", type: "episode",
+      show: { title: "Show", year: 2020, ids: { trakt: 99, slug: "show-2020" } },
+      episode: { season: 1, number: 1, title: "Pilot", ids: { trakt: 9901 } } },
+    { id: 13, watched_at: "2024-01-16T22:00:00.000Z", action: "watch", type: "episode",
+      show: { title: "Show", year: 2020, ids: { trakt: 99, slug: "show-2020" } },
+      episode: { season: 1, number: 2, title: "Ep2", ids: { trakt: 9902 } } },
   ];
 
-  // Pre-populate the merged map as if syncWatched had run.
-  const map = new Map<string, NormalizedItem>();
-  const inception = makeMovie();
-  inception.ids.trakt = 1;
-  inception.title = "Inception";
-  map.set("movie:1", inception);
-  const tdk = makeMovie();
-  // makeMovie() already uses trakt=4 + Dark Knight title
-  map.set("movie:4", tdk);
+  const state: HistoryState = { ...EMPTY_HISTORY_STATE, byMovie: {}, byShow: {}, knownEventIds: [] };
+  const newlyAdded = mergeHistoryEvents(state, history);
 
-  aggregateMovieHistory(history, map);
-
-  assertEq(
-    inception.watch_history_movie,
-    ["2024-06-10T22:30:00.000Z", "2025-02-14T20:15:00.000Z"],
-    "Inception has 2 timestamps, sorted ascending",
-  );
-  assertEq(
-    tdk.watch_history_movie,
-    ["2024-01-15T21:30:00.000Z"],
-    "The Dark Knight has 1 timestamp",
-  );
+  assertEq(newlyAdded, 7, "all 7 events ingested as new");
+  assertEq(state.byMovie[1], ["2024-06-10T22:30:00.000Z", "2025-02-14T20:15:00.000Z"], "Inception 2 watches sorted");
+  assertEq(state.byMovie[4], ["2024-01-15T21:30:00.000Z"], "The Dark Knight 1 watch");
+  const eps = state.byShow[99];
+  assertTrue(!!eps, "show 99 episode list created");
+  assertEq(eps.length, 3, "3 unique (S, E) entries");
+  assertEq(`S${eps[0].season}E${eps[0].episode}`, "S1E1", "sort order: S1E1 first");
+  assertEq(`S${eps[1].season}E${eps[1].episode}`, "S1E2", "S1E2 second");
+  assertEq(`S${eps[2].season}E${eps[2].episode}`, "S2E1", "S2E1 third");
+  assertEq(eps[0].watched_at,
+    ["2024-01-15T21:30:00.000Z", "2024-03-22T19:00:00.000Z"],
+    "S1E1 dual timestamps sorted");
+  assertEq(state.knownEventIds.sort(), [1, 2, 3, 10, 11, 12, 13].sort(),
+    "all 7 event ids tracked");
+  assertEq(state.lastIncrementalSyncAt, "2025-02-14T20:15:00.000Z",
+    "lastIncrementalSyncAt updated to latest watched_at");
 }
 
-// ── Test 12: Watch history aggregation (shows) ────────────────────────────
+// ── Test 12: mergeHistoryEvents — idempotent on replay ────────────────────
+console.log("\n[12] Replaying same events doesn't double-count");
+{
+  const events: TraktHistoryItem[] = [
+    { id: 1, watched_at: "2024-01-15T21:30:00.000Z", action: "watch", type: "movie",
+      movie: { title: "M", year: 2020, ids: { trakt: 7, slug: "m" } } },
+  ];
+  const state: HistoryState = { ...EMPTY_HISTORY_STATE, byMovie: {}, byShow: {}, knownEventIds: [] };
+  mergeHistoryEvents(state, events);
+  const before = state.byMovie[7].length;
+  mergeHistoryEvents(state, events);
+  const after = state.byMovie[7].length;
+  assertEq(after, before, "second merge of same events is a no-op");
+  assertEq(state.knownEventIds.length, 1, "knownEventIds doesn't duplicate");
+}
+
+// ── Test 13: mergeHistoryEvents — extending an existing show ──────────────
+console.log("\n[13] Watching new episodes appends, doesn't replace");
+{
+  const state: HistoryState = { ...EMPTY_HISTORY_STATE, byMovie: {}, byShow: {}, knownEventIds: [] };
+  // Day 1: watched S1E1 and S1E2.
+  mergeHistoryEvents(state, [
+    { id: 1, watched_at: "2024-01-15T21:00:00.000Z", action: "watch", type: "episode",
+      show: { title: "S", year: 2020, ids: { trakt: 50, slug: "s" } },
+      episode: { season: 1, number: 1, title: "P", ids: { trakt: 1 } } },
+    { id: 2, watched_at: "2024-01-15T22:00:00.000Z", action: "watch", type: "episode",
+      show: { title: "S", year: 2020, ids: { trakt: 50, slug: "s" } },
+      episode: { season: 1, number: 2, title: "Ep2", ids: { trakt: 2 } } },
+  ]);
+  // Day 2: incremental fetch returns S1E3 and a re-watch of S1E1.
+  mergeHistoryEvents(state, [
+    { id: 3, watched_at: "2024-01-16T21:00:00.000Z", action: "watch", type: "episode",
+      show: { title: "S", year: 2020, ids: { trakt: 50, slug: "s" } },
+      episode: { season: 1, number: 3, title: "Ep3", ids: { trakt: 3 } } },
+    { id: 4, watched_at: "2024-01-17T21:00:00.000Z", action: "watch", type: "episode",
+      show: { title: "S", year: 2020, ids: { trakt: 50, slug: "s" } },
+      episode: { season: 1, number: 1, title: "P", ids: { trakt: 1 } } },
+  ]);
+  const eps = state.byShow[50];
+  assertEq(eps.length, 3, "3 unique (S, E) after extension");
+  const s1e1 = eps.find((e) => e.season === 1 && e.episode === 1)!;
+  assertEq(s1e1.watched_at.length, 2, "S1E1 has both watches now");
+  const s1e3 = eps.find((e) => e.season === 1 && e.episode === 3)!;
+  assertEq(s1e3.watched_at.length, 1, "S1E3 newly added with 1 watch");
+}
+
+// ── Test 13b: replaceFromFullRefresh detects deletions ────────────────────
 console.log(
-  "\n[12] aggregateShowHistory groups by (show, S, E) + sorts predictably",
+  "\n[13b] replaceFromFullRefresh rebuilds state + tracks deleted ids",
 );
 {
-  // Fixture: same show, S1E1 watched twice, S1E2 once, S2E1 once.
-  const history: TraktHistoryItem[] = [
-    {
-      id: 10,
-      watched_at: "2024-04-02T20:00:00.000Z",
-      action: "watch",
-      type: "episode",
-      show: { title: "Show", year: 2020, ids: { trakt: 99, slug: "show-2020" } },
-      episode: { season: 2, number: 1, title: "S2E1 title", ids: { trakt: 9911 } },
-    },
-    {
-      id: 11,
-      watched_at: "2024-01-15T21:30:00.000Z",
-      action: "watch",
-      type: "episode",
-      show: { title: "Show", year: 2020, ids: { trakt: 99, slug: "show-2020" } },
-      episode: { season: 1, number: 1, title: "Pilot", ids: { trakt: 9901 } },
-    },
-    {
-      id: 12,
-      watched_at: "2024-03-22T19:00:00.000Z",
-      action: "watch",
-      type: "episode",
-      show: { title: "Show", year: 2020, ids: { trakt: 99, slug: "show-2020" } },
-      episode: { season: 1, number: 1, title: "Pilot", ids: { trakt: 9901 } },
-    },
-    {
-      id: 13,
-      watched_at: "2024-01-16T22:00:00.000Z",
-      action: "watch",
-      type: "episode",
-      show: { title: "Show", year: 2020, ids: { trakt: 99, slug: "show-2020" } },
-      episode: { season: 1, number: 2, title: "Ep2", ids: { trakt: 9902 } },
-    },
+  // State has events 1, 2, 3. Full refresh returns only 1 and 3 (event 2
+  // was deleted on Trakt). Result: state holds 1 and 3, deletedCount = 1.
+  const state: HistoryState = { ...EMPTY_HISTORY_STATE, byMovie: {}, byShow: {}, knownEventIds: [] };
+  mergeHistoryEvents(state, [
+    { id: 1, watched_at: "2024-01-15T21:00:00.000Z", action: "watch", type: "movie",
+      movie: { title: "M1", year: 2020, ids: { trakt: 1, slug: "m1" } } },
+    { id: 2, watched_at: "2024-01-16T21:00:00.000Z", action: "watch", type: "movie",
+      movie: { title: "M2", year: 2020, ids: { trakt: 2, slug: "m2" } } },
+    { id: 3, watched_at: "2024-01-17T21:00:00.000Z", action: "watch", type: "movie",
+      movie: { title: "M3", year: 2020, ids: { trakt: 3, slug: "m3" } } },
+  ]);
+
+  const fullPull: TraktHistoryItem[] = [
+    { id: 1, watched_at: "2024-01-15T21:00:00.000Z", action: "watch", type: "movie",
+      movie: { title: "M1", year: 2020, ids: { trakt: 1, slug: "m1" } } },
+    // event 2 deleted on Trakt — absent from full pull
+    { id: 3, watched_at: "2024-01-17T21:00:00.000Z", action: "watch", type: "movie",
+      movie: { title: "M3", year: 2020, ids: { trakt: 3, slug: "m3" } } },
   ];
 
-  const map = new Map<string, NormalizedItem>();
-  const show = makeMovie(); // start from movie helper, then morph
+  const { deletedCount } = replaceFromFullRefresh(state, fullPull);
+  assertEq(deletedCount, 1, "exactly 1 deletion detected");
+  assertEq(state.knownEventIds.sort(), [1, 3], "knownEventIds rebuilt to {1,3}");
+  assertEq(state.byMovie[2], undefined, "deleted movie's entry removed");
+  assertTrue(state.byMovie[1].length === 1, "M1 still has 1 watch");
+  assertTrue(state.byMovie[3].length === 1, "M3 still has 1 watch");
+  assertTrue(state.lastFullRefreshAt.length > 0, "lastFullRefreshAt set");
+}
+
+// ── Test 13c: shouldRunFullRefresh interval logic ─────────────────────────
+console.log("\n[13c] shouldRunFullRefresh respects interval + first-run case");
+{
+  // First run (lastFullRefreshAt = "") → always true
+  const fresh: HistoryState = { ...EMPTY_HISTORY_STATE };
+  assertTrue(shouldRunFullRefresh(fresh, 7), "empty state: always full refresh");
+
+  // Recently refreshed → false
+  const recent: HistoryState = {
+    ...EMPTY_HISTORY_STATE,
+    lastFullRefreshAt: new Date(Date.now() - 86400_000).toISOString(),
+  };
+  assertEq(shouldRunFullRefresh(recent, 7), false, "1 day ago, interval 7 → no");
+
+  // Older than interval → true
+  const stale: HistoryState = {
+    ...EMPTY_HISTORY_STATE,
+    lastFullRefreshAt: new Date(Date.now() - 8 * 86400_000).toISOString(),
+  };
+  assertEq(shouldRunFullRefresh(stale, 7), true, "8 days ago, interval 7 → yes");
+
+  // Malformed timestamp → treated as needing refresh
+  const bad: HistoryState = { ...EMPTY_HISTORY_STATE, lastFullRefreshAt: "not-a-date" };
+  assertEq(shouldRunFullRefresh(bad, 7), true, "bad timestamp → refresh");
+}
+
+// ── Test 13d: applyHistoryStateToItems writes onto NormalizedItems ────────
+console.log("\n[13d] applyHistoryStateToItems hydrates watch_history_* fields");
+{
+  const state: HistoryState = stateFromEvents([
+    { id: 1, watched_at: "2024-01-15T21:00:00.000Z", action: "watch", type: "movie",
+      movie: { title: "M", year: 2020, ids: { trakt: 4, slug: "m" } } },
+    { id: 2, watched_at: "2024-01-15T21:00:00.000Z", action: "watch", type: "episode",
+      show: { title: "S", year: 2020, ids: { trakt: 50, slug: "s" } },
+      episode: { season: 1, number: 1, ids: { trakt: 901 } } },
+  ]);
+
+  const movie = makeMovie();
+  // makeMovie() sets ids.trakt = 4 → matches our event
+  const show = makeMovie();
   show.type = "show";
-  show.title = "Show";
-  show.ids = { trakt: 99, slug: "show-2020" };
-  map.set("show:99", show);
+  show.ids = { trakt: 50, slug: "s" };
 
-  aggregateShowHistory(history, map);
+  applyHistoryStateToItems(state, [movie, show]);
 
-  const eps = show.watch_history_episodes;
-  assertTrue(!!eps, "watch_history_episodes populated");
-  if (eps) {
-    assertEq(eps.length, 3, "3 unique (S, E) entries");
-    // Order: S1E1, S1E2, S2E1
-    assertEq(`S${eps[0].season}E${eps[0].episode}`, "S1E1", "first entry is S1E1");
-    assertEq(`S${eps[1].season}E${eps[1].episode}`, "S1E2", "second entry is S1E2");
-    assertEq(`S${eps[2].season}E${eps[2].episode}`, "S2E1", "third entry is S2E1");
-    assertEq(
-      eps[0].watched_at,
-      ["2024-01-15T21:30:00.000Z", "2024-03-22T19:00:00.000Z"],
-      "S1E1 has both timestamps, sorted ascending",
-    );
-    assertEq(
-      eps[1].watched_at,
-      ["2024-01-16T22:00:00.000Z"],
-      "S1E2 has 1 timestamp",
-    );
-  }
+  assertTrue(
+    Array.isArray(movie.watch_history_movie) && movie.watch_history_movie.length === 1,
+    "movie.watch_history_movie populated",
+  );
+  assertTrue(
+    Array.isArray(show.watch_history_episodes) && show.watch_history_episodes.length === 1,
+    "show.watch_history_episodes populated",
+  );
+  // Defensive copy — mutating the item's array shouldn't poison state.
+  movie.watch_history_movie!.push("BAD");
+  assertEq(state.byMovie[4].length, 1, "state byMovie not affected by item mutation");
 }
 
-// ── Test 13: aggregation skips items not already in the merged map ────────
-console.log("\n[13] Aggregators ignore history rows for unknown items");
+// ── Test 13e: clearHistoryState resets all fields ─────────────────────────
+console.log("\n[13e] clearHistoryState wipes everything in place");
 {
-  const history: TraktHistoryItem[] = [
-    {
-      id: 1,
-      watched_at: "2024-01-15T21:30:00.000Z",
-      action: "watch",
-      type: "movie",
-      movie: { title: "Stranger Movie", year: 2020, ids: { trakt: 999, slug: "stranger" } },
-    },
-  ];
-  const map = new Map<string, NormalizedItem>();
-  // Map is empty — aggregator should not throw and should not insert anything.
-  aggregateMovieHistory(history, map);
-  assertEq(map.size, 0, "map stays empty when no matching item exists");
+  const state: HistoryState = stateFromEvents([
+    { id: 1, watched_at: "2024-01-15T21:00:00.000Z", action: "watch", type: "movie",
+      movie: { title: "M", year: 2020, ids: { trakt: 1, slug: "m" } } },
+  ]);
+  state.lastFullRefreshAt = "2024-01-15T22:00:00.000Z";
+  clearHistoryState(state);
+  assertEq(Object.keys(state.byMovie).length, 0, "byMovie cleared");
+  assertEq(Object.keys(state.byShow).length, 0, "byShow cleared");
+  assertEq(state.knownEventIds.length, 0, "knownEventIds cleared");
+  assertEq(state.lastIncrementalSyncAt, "", "lastIncrementalSyncAt cleared");
+  assertEq(state.lastFullRefreshAt, "", "lastFullRefreshAt cleared");
+}
+
+// ── Test 13f: getIncrementalStartAt + historyStateStats ───────────────────
+console.log("\n[13f] getIncrementalStartAt + historyStateStats");
+{
+  const empty: HistoryState = { ...EMPTY_HISTORY_STATE };
+  assertEq(getIncrementalStartAt(empty), "",
+    "empty state → no start_at filter, full pull");
+  empty.lastIncrementalSyncAt = "2024-05-01T10:00:00.000Z";
+  assertEq(getIncrementalStartAt(empty), "2024-05-01T10:00:00.000Z",
+    "after merge → returns stored timestamp");
+
+  const populated: HistoryState = stateFromEvents([
+    { id: 1, watched_at: "2024-01-15T21:00:00.000Z", action: "watch", type: "movie",
+      movie: { title: "M1", year: 2020, ids: { trakt: 1, slug: "m1" } } },
+    { id: 2, watched_at: "2024-01-15T22:00:00.000Z", action: "watch", type: "movie",
+      movie: { title: "M2", year: 2020, ids: { trakt: 2, slug: "m2" } } },
+    { id: 3, watched_at: "2024-01-15T23:00:00.000Z", action: "watch", type: "episode",
+      show: { title: "S", year: 2020, ids: { trakt: 99, slug: "s" } },
+      episode: { season: 1, number: 1, ids: { trakt: 901 } } },
+  ]);
+  const stats = historyStateStats(populated);
+  assertEq(stats.movies, 2, "2 movies tracked");
+  assertEq(stats.shows, 1, "1 show tracked");
+  assertEq(stats.events, 3, "3 events tracked");
 }
 
 // ── Test 14: renderWatchHistoryList — movie & show formats ────────────────
@@ -1111,7 +1215,57 @@ console.log("\n[21] pickBestTranslation — TV path reads `name` field");
   assertEq(t?.title, "绝命毒师", "TV uses name field");
 }
 
-// ── Test 22 + summary (async tail) ────────────────────────────────────────
+// ── Test 23: TMDB cache key + freshness + expiry math ────────────────────
+console.log("\n[23] TMDB cache helpers (key composition, freshness, expiry)");
+{
+  // Key disambiguates type, id, language so a movie and a show with the
+  // same TMDB id never collide.
+  assertEq(tmdbCacheKey("movie", 155, "zh-CN"), "movie:155:zh-CN",
+    "key includes type, id, language");
+  assertEq(tmdbCacheKey("movie", 155, ""), "movie:155:default",
+    "empty language → 'default' segment");
+  assertEq(tmdbCacheKey("tv", 155, "zh-CN"), "tv:155:zh-CN",
+    "movie 155 vs tv 155 different keys");
+
+  // Freshness states.
+  const now = 1_000_000_000_000;
+  assertEq(cacheEntryFreshness(undefined, now), "missing", "undefined → missing");
+  assertEq(cacheEntryFreshness({ poster_url: "", translation: null, cached_at: now - 1000, expires_at: now + 1000 }, now), "fresh",
+    "expires_at in future → fresh");
+  assertEq(cacheEntryFreshness({ poster_url: "", translation: null, cached_at: now - 10000, expires_at: now - 1 }, now), "stale",
+    "expires_at in past → stale");
+
+  // TTL = 0 means never expire (we use MAX_SAFE_INTEGER as sentinel).
+  const neverExp = computeCacheExpiry(0, now);
+  assertTrue(neverExp >= Number.MAX_SAFE_INTEGER - 1, "TTL 0 → never expires");
+
+  // Positive TTL gets jitter — each call's expiry must be at LEAST 1 day,
+  // and the spread across many calls must be wider than 1 day.
+  const expiries: number[] = [];
+  for (let i = 0; i < 100; i++) {
+    expiries.push(computeCacheExpiry(90, now));
+  }
+  const minExp = Math.min(...expiries);
+  const maxExp = Math.max(...expiries);
+  assertTrue(minExp >= now + 86_400_000, "all expiries are at least 1 day out");
+  assertTrue(maxExp - minExp >= 7 * 86_400_000,
+    `100 entries spread expirations across ≥7 days (got ${(maxExp - minExp) / 86_400_000} days)`);
+}
+
+// ── Test 24: clearTmdbCache + tmdbCacheStats ──────────────────────────────
+console.log("\n[24] clearTmdbCache empties; stats counts entries");
+{
+  const cache: TmdbCache = {};
+  cache["movie:1:default"] = { poster_url: "u1", translation: null, cached_at: 0, expires_at: Number.MAX_SAFE_INTEGER };
+  cache["movie:2:zh-CN"] = { poster_url: "u2", translation: null, cached_at: 0, expires_at: Number.MAX_SAFE_INTEGER };
+  cache["tv:99:ja-JP"] = { poster_url: "u3", translation: null, cached_at: 0, expires_at: Number.MAX_SAFE_INTEGER };
+  assertEq(tmdbCacheStats(cache).entries, 3, "3 entries before clear");
+  clearTmdbCache(cache);
+  assertEq(tmdbCacheStats(cache).entries, 0, "0 entries after clear");
+  assertEq(Object.keys(cache).length, 0, "object keys also empty");
+}
+
+
 // CJS bundle disallows top-level await, so the async work + summary go in
 // one IIFE at the end of the file.
 void (async () => {
@@ -1147,6 +1301,31 @@ void (async () => {
     );
     assertEq(progressUpdates[items.length - 1].done, items.length, "final done = total");
     assertEq(progressUpdates[items.length - 1].total, items.length, "total stays correct");
+  }
+
+  console.log("\n[25] fetchMovieMetadata — cache hit returns without API call");
+  {
+    // Pre-populate the cache with a known-fresh entry. fetchMovieMetadata
+    // should return the cached value WITHOUT calling requestUrl. We verify
+    // by counting calls to the stubbed requestUrl: count must not increase.
+    const cache: TmdbCache = {};
+    const key = tmdbCacheKey("movie", 999, "zh-CN");
+    cache[key] = {
+      poster_url: "https://image.tmdb.org/t/p/w500/cached.jpg",
+      translation: { title: "缓存标题", overview: "缓存简介", tagline: "", genres: ["动作"] },
+      cached_at: Date.now() - 60_000,
+      expires_at: Date.now() + 86_400_000 * 30,
+    };
+
+    const stub = await import("./stub-obsidian");
+    const before = stub.requestUrlMock.calls.length;
+    const result = await fetchMovieMetadata(999, "test-key", "w500", "zh-CN", cache, 90);
+    const after = stub.requestUrlMock.calls.length;
+
+    assertEq(after, before, "cache hit does not call requestUrl");
+    assertEq(result.poster_url, "https://image.tmdb.org/t/p/w500/cached.jpg",
+      "returns cached poster");
+    assertEq(result.translation?.title, "缓存标题", "returns cached title");
   }
 
   console.log(`\n${"=".repeat(60)}`);

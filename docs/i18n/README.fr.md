@@ -16,6 +16,7 @@
 - **Historique de visionnage détaillé** — quel épisode vous avez regardé exactement et quand, y compris les revisionnages, mis à jour à chaque nouvelle session
 - **Métadonnées localisées** — traduction des titres / synopsis / accroches / genres via TMDB ; les originaux anglais sont toujours préservés à côté
 - **Interface bilingue** — paramètres, commandes et notifications en English ou 简体中文 ; modèles de notes intégrés en en / zh-CN / zh-TW
+- **Synchronisation incrémentale** _(0.2.0)_ — la première synchronisation amorce le cache TMDB local et l'état de l'historique Trakt ; les synchronisations suivantes ne récupèrent que ce qui a changé. Le temps de synchronisation en régime stable passe de quelques minutes à quelques secondes. Voir [spec 0001](../specs/0001-incremental-sync.md)
 
 ## 🎬 Historique de visionnage détaillé
 

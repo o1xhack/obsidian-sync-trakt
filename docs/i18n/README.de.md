@@ -16,6 +16,7 @@
 - **Detaillierter Sehverlauf** — genau welche Episode du wann gesehen hast, einschließlich erneuter Visionierungen, synchron gehalten beim Weiterschauen
 - **Lokalisierte Metadaten** — Übersetzung von Titeln / Beschreibungen / Taglines / Genres über TMDB; englische Originale werden immer parallel beibehalten
 - **Zweisprachige Oberfläche** — Einstellungen, Befehle und Hinweise in English oder 简体中文; mitgelieferte Notiz-Vorlagen in en / zh-CN / zh-TW
+- **Inkrementelle Synchronisation** _(0.2.0)_ — die erste Synchronisation füllt den lokalen TMDB-Cache und den Trakt-Verlaufszustand; nachfolgende Synchronisationen rufen nur Änderungen ab. Die Sync-Zeit im eingeschwungenen Zustand sinkt von Minuten auf wenige Sekunden. Siehe [spec 0001](../specs/0001-incremental-sync.md)
 
 ## 🎬 Detaillierter Sehverlauf
 

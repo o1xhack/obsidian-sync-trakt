@@ -79,6 +79,46 @@ const STRINGS = {
     "zh-CN": "嵌入笔记的海报图片尺寸。",
   },
 
+  // [0.2.0] TMDB cache controls
+  "tmdb.cache.ttl.name": {
+    en: "TMDB cache TTL",
+    "zh-CN": "TMDB 缓存有效期",
+  },
+  "tmdb.cache.ttl.desc": {
+    en: "How long cached TMDB metadata stays fresh before being revalidated. Stale entries still serve immediately and refresh in the background, so syncs are never blocked. Default 90 days; ±5 days jitter per entry to spread the revalidation load. Set to Never to keep cached entries indefinitely (use the Clear cache button for manual refresh).",
+    "zh-CN":
+      "缓存的 TMDB 元数据多久之后会被重新验证。过期条目仍会立即返回旧值并在后台异步刷新，同步永远不会被阻塞。默认 90 天，每条目附加 ±5 天随机抖动，分散重验证负载。选「永不过期」即保持缓存不变（要手动刷新请用下方的 Clear 按钮）。",
+  },
+  "tmdb.cache.ttl.never": {
+    en: "Never expire",
+    "zh-CN": "永不过期",
+  },
+  "tmdb.cache.ttl.7": { en: "7 days", "zh-CN": "7 天" },
+  "tmdb.cache.ttl.30": { en: "30 days", "zh-CN": "30 天" },
+  "tmdb.cache.ttl.90": { en: "90 days (default)", "zh-CN": "90 天（默认）" },
+  "tmdb.cache.ttl.365": { en: "365 days", "zh-CN": "365 天" },
+  "tmdb.cache.entries": {
+    en: "Currently cached: {count} entries",
+    "zh-CN": "当前缓存：{count} 条",
+  },
+  "tmdb.cache.clear.name": {
+    en: "Clear TMDB cache",
+    "zh-CN": "清空 TMDB 缓存",
+  },
+  "tmdb.cache.clear.desc": {
+    en: "Drops every cached metadata entry. The next sync re-fetches everything from TMDB (takes a few minutes for large libraries). Useful if you suspect cached titles / posters are stale beyond what the TTL captures.",
+    "zh-CN":
+      "丢弃所有已缓存的元数据。下次同步会从 TMDB 重新拉取全部条目（大库可能需要几分钟）。当你怀疑缓存的标题 / 海报已过时、超出 TTL 范围时可以手动清。",
+  },
+  "tmdb.cache.clear.button": {
+    en: "Clear cache",
+    "zh-CN": "清空缓存",
+  },
+  "tmdb.cache.clear.notice": {
+    en: "TMDB cache cleared.",
+    "zh-CN": "TMDB 缓存已清空。",
+  },
+
   // ── Localization section ──
   "loc.heading": { en: "Localization", "zh-CN": "本地化" },
   "loc.metadataLanguage.name": {
@@ -256,9 +296,41 @@ const STRINGS = {
     "zh-CN": "同步详细观看记录",
   },
   "syncSources.watchedDetail.desc": {
-    en: "Adds per-episode (or per-movie) watch timestamps to the note body via {{watch_history}}. Re-watches are listed separately. Pulls Trakt's /sync/history endpoint — slower than the summary above for large libraries (one entry per individual watch event, paginated at 100/page).",
+    en: "Adds per-episode (or per-movie) watch timestamps to the note body via {{watch_history}}. Re-watches are listed separately. Trakt's /sync/history endpoint is used; subsequent syncs only fetch events newer than the last sync, with a periodic full re-pull (configurable below) to detect deletions.",
     "zh-CN":
-      "通过 {{watch_history}} 在笔记正文中添加每集（或每部电影）的观看时间戳；重看会单独列出。会调用 Trakt 的 /sync/history 端点，对大库用户来说比上方的概要同步慢得多（每个观看事件一条记录，每页 100 条）。",
+      "通过 {{watch_history}} 在笔记正文中添加每集（或每部电影）的观看时间戳；重看会单独列出。使用 Trakt 的 /sync/history 端点；之后每次同步只拉取自上次同步以来的新事件，并按下方配置的周期重新全量刷新一次以检测删除。",
+  },
+
+  // [0.2.0] History state controls (only shown when syncWatchedDetail is on)
+  "history.fullRefreshInterval.name": {
+    en: "History full-refresh interval (days)",
+    "zh-CN": "历史全量刷新间隔（天）",
+  },
+  "history.fullRefreshInterval.desc": {
+    en: "How often the plugin re-fetches the entire Trakt watch history (instead of just new events) to detect deletions on Trakt's side. Smaller value = faster deletion detection at the cost of an occasional slow sync. Default 7 days.",
+    "zh-CN":
+      "插件多久重新拉取一次完整 Trakt 观看历史（而不只是新事件），用于检测 Trakt 那边的删除。值越小，删除检测越快，但偶尔有一次慢同步。默认 7 天。",
+  },
+  "history.state.stats": {
+    en: "Tracked: {movies} movies, {shows} shows, {events} watch events",
+    "zh-CN": "已跟踪：{movies} 部电影，{shows} 部剧集，{events} 个观看事件",
+  },
+  "history.state.clear.name": {
+    en: "Clear history state",
+    "zh-CN": "清空历史状态",
+  },
+  "history.state.clear.desc": {
+    en: "Drops the locally aggregated watch history. The next sync triggers a full re-pull from Trakt to rebuild it. Useful if you suspect the local state has drifted from Trakt (or as a hard reset).",
+    "zh-CN":
+      "丢弃本地聚合的观看历史。下次同步会触发一次 Trakt 全量重新拉取来重建。如果你怀疑本地状态已和 Trakt 不一致（或想硬重置）可以用。",
+  },
+  "history.state.clear.button": {
+    en: "Clear history state",
+    "zh-CN": "清空历史状态",
+  },
+  "history.state.clear.notice": {
+    en: "Watch history state cleared. Next sync will rebuild from Trakt.",
+    "zh-CN": "观看历史状态已清空。下次同步会从 Trakt 重新构建。",
   },
   "syncSources.ratings.name": {
     en: "Sync ratings",
@@ -333,6 +405,14 @@ const STRINGS = {
   "cmd.sync": { en: "Sync", "zh-CN": "同步" },
   "cmd.connect": { en: "Connect account", "zh-CN": "连接账号" },
   "cmd.disconnect": { en: "Disconnect account", "zh-CN": "断开账号" },
+  "cmd.forceFullHistoryRefresh": {
+    en: "Force full watch-history refresh",
+    "zh-CN": "强制全量刷新观看历史",
+  },
+  "cmd.clearTmdbCache": {
+    en: "Clear TMDB metadata cache",
+    "zh-CN": "清空 TMDB 元数据缓存",
+  },
 
   // ── Notices ──
   "notice.notConnected": {
@@ -373,6 +453,14 @@ const STRINGS = {
   "progress.fetchingTrakt": {
     en: "⟳ Fetching from Trakt…",
     "zh-CN": "⟳ 正在拉取 Trakt 数据…",
+  },
+  "progress.fetchingTraktHistory": {
+    en: "⟳ Fetching new watch events…",
+    "zh-CN": "⟳ 正在拉取新观看事件…",
+  },
+  "progress.fullHistoryRefresh": {
+    en: "⟳ Full history refresh (detecting deletions)…",
+    "zh-CN": "⟳ 全量刷新观看历史（检测删除）…",
   },
   "progress.fetchingMetadata": {
     en: "⟳ Loading metadata: {done}/{total}",

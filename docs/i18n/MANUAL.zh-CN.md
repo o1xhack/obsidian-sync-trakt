@@ -84,6 +84,8 @@
 |---|---|---|
 | TMDB API key | _(空)_ | 可选。留空则跳过海报图片。 |
 | Poster size | `w500` | 从 TMDB 拉取的图片宽度变体。可选：w92、w154、w185、w342、w500、w780、original。 |
+| TMDB cache TTL | `90 天` | 缓存的 TMDB 元数据多久之后会被重新验证。**永不过期**则保持缓存不变（只能手动清空）。过期条目会立即返回旧值并在后台异步刷新，同步永远不会被阻塞。每条目附加 ±5 天随机抖动，1000+ 条目不会同一天集体过期。详见 [spec 0001](../specs/0001-incremental-sync.md) §A。 |
+| Clear cache | _(按钮)_ | 丢弃所有已缓存的元数据。下次同步会从 TMDB 重新拉取全部条目（大库可能需要几分钟）。设置项的描述里会显示当前缓存的条目数。 |
 
 ### Localization
 
@@ -147,7 +149,9 @@ Tag notes 是你笔记之间相互链接的主题文件，构建关系图谱。*
 | Sync watchlist | on | 你 Trakt watchlist 上的内容（想看的）。 |
 | Sync favorites | on | 你标记为收藏的内容。 |
 | Sync watch history | off | 你看过的内容。每个条目带播放次数和最近观看日期。可能数据量大。 |
-| Sync watch history (detailed) | off | 在上面的开关之上叠加。调用 Trakt 的 `/sync/history` 端点，通过 `{{watch_history}}` 模板变量在笔记正文里显示每集（或每部电影）的观看时间戳。**对活跃用户显著变慢** —— 每个观看事件都是一条 API 记录，每页 100 条。默认 OFF；只在 "Sync watch history" 开启时显示。 |
+| Sync watch history (detailed) | off | 在上面的开关之上叠加。调用 Trakt 的 `/sync/history` 端点，通过 `{{watch_history}}` 模板变量在笔记正文里显示每集（或每部电影）的观看时间戳。**0.2.0 起增量同步** —— 之后每次同步只拉取自上次同步以来的新事件，加上按下方配置的周期定时全量刷新一次以检测删除。默认 OFF；只在 "Sync watch history" 开启时显示。 |
+| History full-refresh interval (days) | `7` | _(仅在「Sync watch history (detailed)」开启时显示)_ 插件多久重新拉取一次完整 Trakt 观看历史（而不只是新事件），用于检测 Trakt 那边的删除。值越小，删除检测越快，但偶尔有一次慢同步。 |
+| Clear history state | _(按钮)_ | _(仅在详细同步开启时显示)_ 丢弃本地聚合的观看历史。下次同步会从头重建。描述里会显示当前跟踪的电影 / 剧集 / 事件数。 |
 | Sync ratings | off | 你打过分的内容（1-10）。 |
 
 ### Sync behavior
@@ -336,6 +340,17 @@ Tag notes 是你笔记之间相互链接的主题文件，构建关系图谱。*
 - **手动**：命令 **Traktr: Sync**（命令面板可访问）
 - **启动时**：在设置里启用 **Sync on startup**（Obsidian 加载后 5 秒触发）
 - **定时**：启用 **Auto-sync** 并设置间隔
+- **强制全量历史刷新**：命令 **Traktr: Force full watch-history refresh** —— 跳过周期间隔，立刻重新拉取整个 Trakt 历史。当你刚在 Trakt 上删了一个错误的 scrobble、想立刻让插件检测到，可以用这个
+- **清空 TMDB 缓存**：命令 **Traktr: Clear TMDB metadata cache** —— 清空所有已缓存的 TMDB 条目。下次同步会从 TMDB 重新拉取所有元数据。和 Settings → TMDB → **Clear cache** 按钮等效
+
+### 同步为什么这么快（0.2.0+）
+
+第一次同步把本地缓存填好之后，后续同步的 API 调用数只取决于真正变了的内容：
+
+- **TMDB 元数据缓存**跨同步、跨设备保留。一部电影的标题 / 海报 / 简介只拉一次，之后一直复用，直到 TTL 过期或你手动 Clear。**典型同步 ~5-10 次 TMDB 调用，而不是 ~1200 次**
+- **Trakt 历史增量拉取**用 `?start_at=<上次同步时间>`。一周的新观看通常一页就够（1 次 API 调用）。每隔 `History full-refresh interval (days)` 周期做一次全量重拉以检测删除
+
+完整设计原理见 [`specs/0001-incremental-sync.md`](../specs/0001-incremental-sync.md)。
 
 ### Dataview 查询示例
 

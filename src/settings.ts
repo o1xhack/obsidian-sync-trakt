@@ -1,6 +1,13 @@
 import { App, PluginSettingTab, Setting, Notice } from "obsidian";
 import type TraktrPlugin from "./main";
 import { getTranslator, type UiLanguage } from "./i18n";
+import {
+  EMPTY_HISTORY_STATE,
+  type HistoryState,
+  type TmdbCache,
+} from "./types";
+import { clearTmdbCache, tmdbCacheStats } from "./tmdb-api";
+import { clearHistoryState, historyStateStats } from "./history-state";
 
 export const POSTER_SIZES = [
   "w92",
@@ -148,6 +155,26 @@ export interface TraktrSettings {
   syncOnStartup: boolean;
   overwriteExisting: boolean;
   deleteRemovedItems: boolean;
+
+  // ── [0.2.0] TMDB cache ──
+  // Persistent across syncs and across devices (lives in data.json which
+  // follows the user's vault sync layer). Keyed by
+  // `${type}:${tmdbId}:${language || 'default'}` so each (item, language)
+  // combination has its own slot.
+  tmdbCache: TmdbCache;
+  // 0 = never expire. Otherwise the configured days, ±5 days jitter per
+  // entry to avoid 1000+ entries all expiring on the same day.
+  tmdbCacheTtlDays: number;
+
+  // ── [0.2.0] History state for incremental Trakt history sync ──
+  // Only meaningful when syncWatchedDetail is on. Stores aggregated
+  // watch events plus the set of every event id we've already seen,
+  // letting subsequent syncs do `?start_at=lastIncrementalSyncAt`
+  // instead of pulling the full history every time.
+  historyState: HistoryState;
+  // Periodic full refresh to catch deletions on Trakt's side that an
+  // incremental fetch can't see. Default 7 days.
+  historyFullRefreshIntervalDays: number;
 }
 
 export const DEFAULT_MOVIE_TEMPLATE_EN = `![poster]({{poster_url}})
@@ -418,6 +445,12 @@ export const DEFAULT_SETTINGS: TraktrSettings = {
   syncOnStartup: false,
   overwriteExisting: false,
   deleteRemovedItems: false,
+
+  // [0.2.0] TMDB cache + history state defaults
+  tmdbCache: {},
+  tmdbCacheTtlDays: 90,
+  historyState: { ...EMPTY_HISTORY_STATE },
+  historyFullRefreshIntervalDays: 7,
 };
 
 export class TraktrSettingTab extends PluginSettingTab {
@@ -539,6 +572,45 @@ export class TraktrSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         });
       });
+
+    // [0.2.0] TMDB cache controls — TTL dropdown + manual clear button.
+    // Implemented to address the "every sync re-fetches all 1000+ items"
+    // bottleneck reported by users. See spec 0001 §A for design.
+    const cacheStats = tmdbCacheStats(this.plugin.settings.tmdbCache);
+    const cacheStatsLabel = t("tmdb.cache.entries", {
+      count: cacheStats.entries,
+    });
+
+    new Setting(containerEl)
+      .setName(t("tmdb.cache.ttl.name"))
+      .setDesc(t("tmdb.cache.ttl.desc"))
+      .addDropdown((dd) => {
+        dd.addOption("0", t("tmdb.cache.ttl.never"));
+        dd.addOption("7", t("tmdb.cache.ttl.7"));
+        dd.addOption("30", t("tmdb.cache.ttl.30"));
+        dd.addOption("90", t("tmdb.cache.ttl.90"));
+        dd.addOption("365", t("tmdb.cache.ttl.365"));
+        dd.setValue(String(this.plugin.settings.tmdbCacheTtlDays));
+        dd.onChange(async (value) => {
+          this.plugin.settings.tmdbCacheTtlDays = parseInt(value, 10) || 0;
+          await this.plugin.saveSettings();
+        });
+      });
+
+    new Setting(containerEl)
+      .setName(t("tmdb.cache.clear.name"))
+      .setDesc(`${cacheStatsLabel}\n\n${t("tmdb.cache.clear.desc")}`)
+      .addButton((btn) =>
+        btn
+          .setButtonText(t("tmdb.cache.clear.button"))
+          .setWarning()
+          .onClick(async () => {
+            clearTmdbCache(this.plugin.settings.tmdbCache);
+            await this.plugin.saveSettings();
+            new Notice(t("tmdb.cache.clear.notice"));
+            this.display();
+          }),
+      );
 
     // ── Localization ──
     new Setting(containerEl).setName(t("loc.heading")).setHeading();
@@ -916,8 +988,54 @@ export class TraktrSettingTab extends PluginSettingTab {
             .onChange(async (value) => {
               this.plugin.settings.syncWatchedDetail = value;
               await this.plugin.saveSettings();
+              this.display();
             }),
         );
+
+      // [0.2.0] Detailed-history controls — only meaningful when detail
+      // sync is on. Lets the user tune how often the plugin re-pulls the
+      // full history (to detect deletions on Trakt's side that an
+      // incremental fetch can't see), and shows current state stats +
+      // a manual clear button.
+      if (this.plugin.settings.syncWatchedDetail) {
+        const historyStats = historyStateStats(
+          this.plugin.settings.historyState,
+        );
+        const historyStatsLabel = t("history.state.stats", {
+          movies: historyStats.movies,
+          shows: historyStats.shows,
+          events: historyStats.events,
+        });
+
+        new Setting(containerEl)
+          .setName(t("history.fullRefreshInterval.name"))
+          .setDesc(t("history.fullRefreshInterval.desc"))
+          .addSlider((slider) =>
+            slider
+              .setLimits(1, 30, 1)
+              .setValue(this.plugin.settings.historyFullRefreshIntervalDays)
+              .setDynamicTooltip()
+              .onChange(async (value) => {
+                this.plugin.settings.historyFullRefreshIntervalDays = value;
+                await this.plugin.saveSettings();
+              }),
+          );
+
+        new Setting(containerEl)
+          .setName(t("history.state.clear.name"))
+          .setDesc(`${historyStatsLabel}\n\n${t("history.state.clear.desc")}`)
+          .addButton((btn) =>
+            btn
+              .setButtonText(t("history.state.clear.button"))
+              .setWarning()
+              .onClick(async () => {
+                clearHistoryState(this.plugin.settings.historyState);
+                await this.plugin.saveSettings();
+                new Notice(t("history.state.clear.notice"));
+                this.display();
+              }),
+          );
+      }
     }
 
     new Setting(containerEl)

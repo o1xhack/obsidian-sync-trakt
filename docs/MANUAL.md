@@ -83,6 +83,8 @@ Access tokens are refreshed automatically before each sync (no manual re-authent
 |---|---|---|
 | TMDB API key | _(blank)_ | Optional. Leave blank to skip poster images. |
 | Poster size | `w500` | Image width variant fetched from TMDB. Options: w92, w154, w185, w342, w500, w780, original. |
+| TMDB cache TTL | `90 days` | How long cached TMDB metadata stays fresh before being revalidated. **Never expire** keeps entries indefinitely (only manually cleared). Stale entries are returned immediately and refreshed in the background, so syncs are never blocked. Each entry gets ±5 days jitter, so 1000+ items don't all expire on the same day. See [spec 0001](specs/0001-incremental-sync.md) §A. |
+| Clear cache | _(button)_ | Drops every cached metadata entry. The next sync re-fetches everything from TMDB (takes a few minutes for large libraries). The setting label shows the current entry count. |
 
 ### Localization
 
@@ -146,7 +148,9 @@ Tag notes are topic files you link to from your notes, creating a graph of conne
 | Sync watchlist | on | Items on your Trakt watchlist (things you want to watch). |
 | Sync favorites | on | Items you've marked as favorites. |
 | Sync watch history | off | Items you've watched. Adds play count and last-watched date per item. Can be a large dataset. |
-| Sync watch history (detailed) | off | Layered on top of the toggle above. Pulls Trakt's `/sync/history` endpoint and surfaces per-episode (or per-movie) watch timestamps via the `{{watch_history}}` template variable. **Significantly slower** for active users — each individual watch event is one API entry, paginated at 100/page. Off by default; only shown when "Sync watch history" is on. |
+| Sync watch history (detailed) | off | Layered on top of the toggle above. Pulls Trakt's `/sync/history` endpoint and surfaces per-episode (or per-movie) watch timestamps via the `{{watch_history}}` template variable. As of 0.2.0 the sync is **incremental** — subsequent syncs only fetch events newer than the last sync, plus a periodic full re-pull (configurable below) to detect deletions. Off by default; only shown when "Sync watch history" is on. |
+| History full-refresh interval (days) | `7` | _(only shown when Sync watch history (detailed) is on)_ How often the plugin re-fetches the entire Trakt watch history (instead of just new events) to detect deletions on Trakt's side. Smaller value = faster deletion detection at the cost of an occasional slow sync. |
+| Clear history state | _(button)_ | _(only shown when detailed sync is on)_ Drops the locally aggregated watch history. Next sync rebuilds from scratch. The label shows current counts (movies / shows / events tracked). |
 | Sync ratings | off | Items you've rated (1–10). |
 
 ### Sync behavior
@@ -341,6 +345,17 @@ When you switch **Metadata language** and run sync again:
 - **Manual**: command **Traktr: Sync** (accessible via the command palette)
 - **On startup**: enable **Sync on startup** in settings (runs 5 seconds after Obsidian loads)
 - **Scheduled**: enable **Auto-sync** and set an interval
+- **Force full history refresh**: command **Traktr: Force full watch-history refresh** — bypasses the periodic interval and immediately re-pulls the entire Trakt history. Useful when you've just deleted a wrong scrobble on Trakt and want the plugin to detect it now
+- **Clear TMDB cache**: command **Traktr: Clear TMDB metadata cache** — empties every cached TMDB entry. The next sync re-fetches all metadata from TMDB. Same effect as the Settings → TMDB → **Clear cache** button
+
+### How sync stays fast (0.2.0+)
+
+After the first sync seeds the local caches, subsequent syncs are bounded by API calls for genuinely new data:
+
+- **TMDB metadata cache** survives across syncs and across devices. A movie's title / poster / overview is fetched once and reused until either the configured TTL elapses or you click Clear cache. ~5-10 calls per typical sync instead of ~1200
+- **Trakt history incremental fetch** uses `?start_at=<lastSync>`. A normal week's worth of new watches usually fits in a single page (1 API call). The periodic full re-pull happens once per `History full-refresh interval (days)` to catch deletions
+
+See [`specs/0001-incremental-sync.md`](specs/0001-incremental-sync.md) for the full design rationale.
 
 ### Dataview example queries
 

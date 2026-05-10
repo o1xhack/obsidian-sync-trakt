@@ -1,533 +1,205 @@
-# Traktr — Developer Guide
+# Developer guide
 
-A reference for understanding, debugging, and extending the plugin.
+Onboarding for contributors. For deep technical reference see
+[`ARCHITECTURE.md`](ARCHITECTURE.md). For why specific decisions were
+made, see [`specs/`](specs/).
 
----
+## Quick start
 
-## Table of Contents
+```bash
+git clone https://github.com/o1xhack/obsidian-sync-trakt.git
+cd obsidian-sync-trakt
+npm install
 
-1. [Repository structure](#1-repository-structure)
-2. [Build system](#2-build-system)
-3. [Architecture overview](#3-architecture-overview)
-4. [Plugin lifecycle](#4-plugin-lifecycle)
-5. [Settings](#5-settings)
-6. [Authentication](#6-authentication)
-7. [Sync engine](#7-sync-engine)
-8. [Note rendering](#8-note-rendering)
-9. [Key data types](#9-key-data-types)
-10. [Common tasks](#10-common-tasks)
-
----
-
-## 1. Repository structure
-
-```
-trakt/
-├── src/
-│   ├── main.ts          # Plugin entry point and lifecycle
-│   ├── settings.ts      # Settings interface, defaults, settings UI tab
-│   ├── sync-engine.ts   # Core sync logic: fetch → merge → reconcile
-│   ├── note-renderer.ts # Turns NormalizedItem into Markdown note content
-│   ├── trakt-api.ts     # Trakt REST API calls
-│   ├── trakt-auth.ts    # OAuth device-code flow + token refresh
-│   ├── tmdb-api.ts      # TMDB poster image fetches
-│   ├── types.ts         # All TypeScript interfaces
-│   └── utils.ts         # sanitizeFilename, renderTemplate, toFrontmatter, parseFrontmatter
-├── doc/
-│   ├── MANUAL.md        # End-user manual
-│   └── DEVELOPER.md     # This file
-├── main.js              # Compiled output (gitignored — attached to GitHub releases)
-├── manifest.json        # Plugin metadata (id, name, version, minAppVersion)
-├── styles.css           # Optional CSS loaded by Obsidian
-├── esbuild.config.mjs   # Bundler config
-├── tsconfig.json        # TypeScript config
-└── package.json
+npm run dev          # esbuild watch mode (no type check)
+npm run build        # type-check + production bundle → main.js
+npm run lint         # eslint
+npm run test:i18n    # smoke tests (no test framework dep)
 ```
 
+Plug into a real Obsidian vault for manual testing:
 
----
-
-## 2. Build system
-
-```mermaid
-flowchart LR
-    A["src/*.ts"] -->|"tsc -noEmit\n(type-check only)"| B{Type errors?}
-    B -->|yes| C[Build fails]
-    B -->|no| D["esbuild.config.mjs"]
-    D -->|bundle + minify| E["main.js"]
+```bash
+# Symlink the repo into a test vault's plugins folder
+ln -s "$(pwd)" ~/path/to/test-vault/.obsidian/plugins/obsidian-sync-trakt
+# Run dev mode in another terminal
+npm run dev
+# In Obsidian: Settings → Community plugins → enable Obsidian Sync Trakt.
+# Reload Obsidian (Cmd+R) after each rebuild.
 ```
 
-- **`npm run dev`** — runs esbuild in watch mode, no type checking, fast iteration
-- **`npm run build`** — runs `tsc -noEmit` first (full type check), then esbuild in production mode
+## Build system
 
-esbuild bundles everything into a single `main.js` with all `node_modules` inlined, except modules listed as `external` (the Obsidian API, Node built-ins, Electron). Those are provided at runtime by Obsidian itself.
+esbuild bundles `src/main.ts` to `main.js`, externalizing the `obsidian`
+module. esbuild config: [`esbuild.config.mjs`](../esbuild.config.mjs).
 
----
+The TypeScript step in `npm run build` is **type checking only**
+(`tsc -noEmit`) — esbuild does the actual transpilation.
 
-## 3. Architecture overview
+`tsconfig.json` has `strictNullChecks` on. Keep it that way.
 
-```mermaid
-flowchart TD
-    OBS[Obsidian runtime]
-    MAIN[TraktrPlugin\nmain.ts]
-    SE[SyncEngine\nsync-engine.ts]
-    NR[note-renderer.ts]
-    TA[trakt-api.ts]
-    TB[trakt-auth.ts]
-    TM[tmdb-api.ts]
-    UT[utils.ts]
-    VAULT[(Obsidian Vault)]
-    TRAKT[(Trakt API)]
-    TMDBA[(TMDB API)]
+## Repository structure
 
-    OBS -->|loads & calls onload| MAIN
-    MAIN -->|creates| SE
-    MAIN -->|reads/writes settings| VAULT
-    SE -->|token refresh| TB
-    SE -->|fetch data| TA
-    SE -->|fetch posters| TM
-    SE -->|render notes| NR
-    NR -->|renderTemplate\ntoFrontmatter| UT
-    SE -->|parseFrontmatter\nsanitizeFilename| UT
-    SE -->|create/modify/trash files| VAULT
-    TA -->|HTTP| TRAKT
-    TB -->|HTTP| TRAKT
-    TM -->|HTTP| TMDBA
+```
+src/                Plugin source code
+├── main.ts          Plugin entry: onload(), commands, settings tab
+├── settings.ts      Settings schema, defaults, settings tab UI, default templates
+├── i18n.ts          Plugin runtime UI strings (en + zh-CN), translator
+├── sync-engine.ts   SyncEngine — orchestrates a sync run end to end
+├── trakt-api.ts     Trakt API client + history state types
+├── trakt-auth.ts    AuthModal + token refresh
+├── tmdb-api.ts      TMDB client + cache + translation picker
+├── note-renderer.ts Frontmatter + body template + body marker management
+├── types.ts         Shared types
+└── utils.ts         sanitizeFilename, renderTemplate, toFrontmatter, parseFrontmatter, processWithConcurrency
+
+tests/               Smoke tests (single executable file, stubbed obsidian)
+docs/                User + developer documentation
+docs/specs/          Design specs for major changes
+docs/i18n/           Translations of README / SETUP / MANUAL
+.github/workflows/   CI: lint on PR/push, release on tag push (idempotent)
+scripts/release.sh   Local end-to-end release: bump versions, build, tag, push, GitHub release
+manifest.json        Obsidian plugin manifest
+versions.json        Plugin version → minimum Obsidian version map
 ```
 
-The plugin has no background server. Everything happens inside the Obsidian process when a sync is triggered.
-
----
-
-## 4. Plugin lifecycle
-
-### Startup sequence
-
-```mermaid
-sequenceDiagram
-    participant OBS as Obsidian
-    participant MAIN as TraktrPlugin
-    participant SE as SyncEngine
-    participant VAULT as Vault
-
-    OBS->>MAIN: onload()
-    MAIN->>VAULT: loadData() → settings
-    MAIN->>SE: new SyncEngine(app, settings, saveSettings)
-    MAIN->>MAIN: addSettingTab()
-    MAIN->>MAIN: addCommand() ×3
-    MAIN->>MAIN: addStatusBarItem()
-    MAIN->>MAIN: configureAutoSync()
-    alt syncOnStartup && accessToken
-        MAIN->>MAIN: setTimeout(5s) → sync()
-    end
-```
-
-### Auto-sync reconfiguration
-
-`configureAutoSync()` is called during `onload()` and again whenever the user changes auto-sync settings in the UI.
-
-```mermaid
-flowchart TD
-    A[configureAutoSync called] --> B{autoSyncIntervalId set?}
-    B -->|yes| C[clearInterval old ID]
-    C --> D{autoSyncEnabled\n&& accessToken?}
-    B -->|no| D
-    D -->|no| E[done — no interval running]
-    D -->|yes| F[setInterval every N minutes]
-    F --> G[registerInterval — Obsidian\nclears on plugin unload]
-```
-
-> **Note:** `autoSyncIntervalId` is kept as a field so `configureAutoSync` can clear the previous interval before creating a new one. `registerInterval` handles final cleanup on unload; there is no `onunload` override needed.
-
----
-
-## 5. Settings
-
-### Data flow
-
-```mermaid
-flowchart LR
-    DF[DEFAULT_SETTINGS] -->|merged with| LD[loadData from vault]
-    LD --> S[this.settings object]
-    S -->|passed by reference| SE[SyncEngine]
-    S -->|passed by reference| AUTH[AuthModal]
-    UI[TraktrSettingTab] -->|mutates| S
-    UI -->|calls| SAVE[saveSettings → saveData]
-```
-
-`this.settings` is passed by reference to `SyncEngine` and `AuthModal`. Both mutate it directly (e.g. writing new tokens after auth). This means `SyncEngine` always sees the latest settings without needing to be recreated.
-
-### Interface at a glance (`src/settings.ts`)
-
-| Group | Key fields |
-|---|---|
-| Auth | `clientId`, `clientSecret`, `accessToken`, `refreshToken`, `tokenExpiresAt` |
-| TMDB | `tmdbApiKey`, `posterSize` |
-| Vault | `propertyPrefix`, `folder`, `filenameTemplate` |
-| Templates | `movieNoteTemplate`, `showNoteTemplate` |
-| Tags | `addTags`, `tagPrefix` |
-| Tag notes | `addTagNotes`, `createTagNotes`, `tagNotesFolder` |
-| Sources | `syncWatchlist`, `syncFavorites`, `syncWatched`, `syncRatings` |
-| Behavior | `syncMovies`, `syncShows`, `autoSyncEnabled`, `autoSyncIntervalMinutes`, `syncOnStartup`, `overwriteExisting`, `deleteRemovedItems` |
-
-`DEFAULT_SETTINGS` provides every field so `Object.assign({}, DEFAULT_SETTINGS, savedData)` always produces a complete object, even after adding new fields to the interface.
-
----
-
-## 6. Authentication
-
-Trakt uses the **OAuth 2.0 device code flow** — no redirect URI or browser callback needed. The user visits a URL and enters a short code; the plugin polls until authorized.
-
-### Full auth flow
-
-```mermaid
-sequenceDiagram
-    participant USER as User
-    participant AUTH as AuthModal
-    participant API as Trakt API
-    participant SETTINGS as settings object
-
-    USER->>AUTH: clicks "Connect to Trakt"
-    AUTH->>API: POST /oauth/device/code {client_id}
-    API-->>AUTH: {device_code, user_code, verification_url, expires_in, interval}
-    AUTH->>USER: display verification_url + user_code
-    loop every interval seconds
-        AUTH->>API: POST /oauth/device/token {device_code, client_id, client_secret}
-        alt 400 - not yet authorized
-            API-->>AUTH: keep polling
-        else 200 - authorized
-            API-->>AUTH: {access_token, refresh_token, expires_in, created_at}
-            AUTH->>SETTINGS: write tokens + tokenExpiresAt
-            AUTH->>AUTH: call onSuccess() → saveSettings()
-            AUTH->>AUTH: close modal
-        else 409/418 - user denied
-            AUTH->>USER: show error, stop polling
-        else 410 - code expired
-            AUTH->>USER: show error, stop polling
-        else 429 - too fast
-            API-->>AUTH: skip this cycle, continue
-        end
-    end
-```
-
-### Token refresh
-
-`ensureValidToken()` in `trakt-auth.ts` is called at the start of every sync. It checks whether the access token expires within the next hour and refreshes it proactively.
-
-```mermaid
-flowchart TD
-    A[ensureValidToken called] --> B{accessToken\n&& refreshToken?}
-    B -->|no| ERR1[throw: not connected]
-    B -->|yes| C{expires within\n1 hour?}
-    C -->|no| OK[token still valid — return]
-    C -->|yes| D[POST /oauth/token with refreshToken]
-    D --> E{success?}
-    E -->|yes| F[write new tokens to settings\ncall saveSettings]
-    E -->|no| G[clear all tokens\ncall saveSettings\nthrow: session expired]
-```
-
----
-
-## 7. Sync engine
-
-`SyncEngine.sync()` in `src/sync-engine.ts` is the core of the plugin. It runs in three phases: **fetch**, **merge**, **reconcile**.
-
-### High-level flow
-
-```mermaid
-flowchart TD
-    START([sync called]) --> GUARD{already syncing?}
-    GUARD -->|yes| NOTICE[Notice: already in progress]
-    GUARD -->|no| TOKEN[ensureValidToken]
-    TOKEN --> FETCH
-
-    subgraph FETCH ["Phase 1 — Fetch & Merge (parallel)"]
-        direction LR
-        FM[fetchAndMergeMovies]
-        FS[fetchAndMergeShows]
-        FM ~~~ FS
-    end
-
-    FETCH --> TAGNOTES[ensureTagNotes\ncreate tag note files if missing]
-    TAGNOTES --> RECONCILE
-
-    subgraph RECONCILE ["Phase 2 — Reconcile"]
-        direction TB
-        POSTERS[Batch fetch all poster URLs\nPromise.all]
-        POSTERS --> LOOP[For each merged item:\ncreate or update note]
-        LOOP --> DELETE[If deleteRemovedItems:\ntrash orphaned notes]
-    end
-
-    RECONCILE --> DONE([Notice: result summary])
-```
-
-### fetchAndMergeMovies / fetchAndMergeShows
-
-Both methods follow the same pattern. All four source API calls fire concurrently:
-
-```mermaid
-flowchart TD
-    START([fetchAndMergeMovies]) --> PARALLEL
-
-    subgraph PARALLEL ["Promise.all — all fire at once"]
-        W[fetchWatchlist movies]
-        WA[fetchWatchedMovies]
-        F[fetchFavorites movies]
-        R[fetchRatings movies]
-    end
-
-    PARALLEL --> MERGE
-
-    subgraph MERGE ["Merge results into Map&lt;string, NormalizedItem&gt;"]
-        direction TB
-        M1[for watchlistItems:\nitem.watchlist = true]
-        M2[for watchedItems:\nitem.watched = true\nitem.plays = N]
-        M3[for favoriteItems:\nitem.favorite = true]
-        M4[for ratingItems:\nitem.my_rating = N]
-    end
-```
-
-**`getOrCreateItem`** is the key deduplication function. If an item appears in multiple sources (e.g. both watchlist and watched), it gets a single `NormalizedItem` and the flags from each source are merged onto it:
-
-```mermaid
-flowchart LR
-    A["getOrCreateItem(map, ids, type, ...)"] --> B{map.has\nitemKey?}
-    B -->|yes| C[return existing item]
-    B -->|no| D{type?}
-    D -->|movie| E[baseFromMovie → new item]
-    D -->|show| F[baseFromShow → new item]
-    E --> G[map.set itemKey, item]
-    F --> G
-    G --> H[return new item]
-```
-
-**Item key format:** `"movie:123"` or `"show:456"` — a composite of type + Trakt ID. This prevents collisions since Trakt assigns IDs independently per type (a movie and a show can share the same number).
-
-### reconcileType — create/update/delete
-
-```mermaid
-flowchart TD
-    A[reconcileType] --> B[ensureFolder]
-    B --> C[scanExistingNotes → localNotes map]
-    C --> POSTERS[Batch poster fetches\nPromise.all over all items]
-    POSTERS --> LOOP
-
-    subgraph LOOP ["For each item in mergedItems"]
-        direction TB
-        L1{localNotes\nhas this key?}
-        L1 -->|no| CREATE[vault.create new note]
-        L1 -->|yes| L2{overwriteExisting?}
-        L2 -->|yes| OVERWRITE[vault.process — full re-render]
-        L2 -->|no| FMONLY[fileManager.processFrontMatter\nmerge new fields, body untouched]
-    end
-
-    LOOP --> ORPHAN
-
-    subgraph ORPHAN ["If deleteRemovedItems"]
-        direction TB
-        O1[For each file in localNotes]
-        O1 --> O2{still in mergedItems?}
-        O2 -->|no| O3[vault.trash file]
-        O2 -->|yes| O4[skip]
-    end
-```
-
-### scanExistingNotes
-
-Reads the notes folder and builds a `Map<string, TFile>` keyed by the same `"type:id"` composite. This is how the engine knows which vault files correspond to which Trakt items.
-
-```mermaid
-flowchart TD
-    A[scanExistingNotes] --> B{folder exists?}
-    B -->|no| EMPTY[return empty map]
-    B -->|yes| C[for each .md file in folder]
-    C --> D[cachedRead → parseFrontmatter]
-    D --> E{t_id and t_type\nboth present?}
-    E -->|yes| F["map.set('type:id', TFile)"]
-    E -->|no| G[skip file]
-```
-
-> **Why read `type` as well as `id`?** Trakt IDs are not globally unique across types. Movie #1 and Show #1 are different entities. The composite key ensures they never collide. The property names are `${propertyPrefix}id` and `${propertyPrefix}type` (e.g. `trakt_id`, `trakt_type` with the default prefix).
-
-### Trakt API pagination
-
-`fetchPaginated` in `trakt-api.ts` handles all paginated endpoints:
-
-```mermaid
-flowchart TD
-    A["fetchPaginated(path, ...)"] --> B["GET path?page=1&limit=100"]
-    B --> C{status?}
-    C -->|429| ERR1[throw rate limit]
-    C -->|401| ERR2[throw expired session]
-    C -->|5xx| ERR3[throw server error]
-    C -->|200| D[append items to array]
-    D --> E{page >= X-Pagination-Page-Count?}
-    E -->|yes| DONE[return all items]
-    E -->|no| F[page++]
-    F --> B
-```
-
----
-
-## 8. Note rendering
-
-`src/note-renderer.ts` turns a `NormalizedItem` into Markdown.
-
-### Full note render path
-
-```mermaid
-flowchart TD
-    ITEM[NormalizedItem] --> FM[buildFrontmatterData]
-    ITEM --> CTX[buildTemplateContext]
-
-    FM --> |"Record&lt;string, unknown&gt;"| YML[toFrontmatter\nutils.ts]
-    YML --> FMSTR["---\ntrakt_title: ...\ntags:\n  - trakt/movie\n---"]
-
-    CTX --> |"Record&lt;string, unknown&gt;"| TPL[renderTemplate\nutils.ts]
-    TPL --> BODY["# Title (year)\n![poster](...)\n..."]
-
-    FMSTR --> CONCAT["renderNote output:\nfrontmatter + body"]
-    BODY --> CONCAT
-```
-
-### Frontmatter-only update (overwriteExisting = false)
-
-Uses Obsidian's `fileManager.processFrontMatter`, which atomically parses and rewrites the YAML block while leaving the note body untouched. New frontmatter values from `buildFrontmatterData` are merged in; null/undefined values delete the key; the body is never touched.
-
-```mermaid
-flowchart LR
-    ITEM[NormalizedItem] --> BFM[buildFrontmatterData]
-    BFM --> MERGE["processFrontMatter callback:\nmerge new keys into fm object"]
-    MERGE --> OBS[Obsidian rewrites frontmatter\nbody preserved]
-```
-
-### Template variable resolution
-
-`renderTemplate` in `utils.ts` does a simple regex replace of `{{varName}}` → value. Variables that are `null`/`undefined` become empty string. Arrays join with `", "`. After substitution, any line that is a Markdown image with an empty URL (e.g. `![poster]()` when no TMDB key is set) is stripped from the output.
-
-The same `{{variable}}` names are available whether you're using the movie template or the show template. Movie-specific variables (like `{{tagline}}`) are just empty in show notes, and vice versa.
-
----
-
-## 9. Key data types
-
-```mermaid
-classDiagram
-    class NormalizedItem {
-        +ItemType type
-        +string title
-        +number year
-        +TraktIds ids
-        +string overview
-        +string[] genres
-        +number runtime
-        +number rating
-        +number votes
-        +string certification
-        +string country
-        +string language
-        +string status
-        +string? tagline
-        +string? released
-        +string? network
-        +number? aired_episodes
-        +string? first_aired
-        +string? poster_url
-        +boolean? watchlist
-        +boolean? watched
-        +number? plays
-        +boolean? favorite
-        +number? my_rating
+For module-level dependency graph and what each file is responsible
+for, see [`ARCHITECTURE.md § 2`](ARCHITECTURE.md#2-module-dependency-graph).
+
+## Plugin lifecycle
+
+`main.ts` extends Obsidian's `Plugin` class:
+
+```typescript
+export default class TraktrPlugin extends Plugin {
+  async onload() {
+    await this.loadSettings();
+    this.syncEngine = new SyncEngine(this.app, this.settings, () => this.saveSettings());
+    this.addSettingTab(new TraktrSettingTab(this.app, this));
+    this.addCommand(/* trakt-sync */);
+    this.addCommand(/* trakt-connect */);
+    this.addCommand(/* trakt-disconnect */);
+    this.addCommand(/* trakt-force-full-refresh */);
+    this.addCommand(/* trakt-clear-tmdb-cache */);
+    this.statusBarEl = this.addStatusBarItem();
+    this.configureAutoSync();
+    this.registerDomEvent(document, "visibilitychange", /* refresh on focus */);
+    if (this.settings.syncOnStartup && this.settings.accessToken) {
+      window.setTimeout(() => void this.runSyncWithProgress(), 5000);
     }
-
-    class TraktIds {
-        +number trakt
-        +string slug
-        +string? imdb
-        +number? tmdb
-        +number? tvdb
-    }
-
-    class SyncResult {
-        +number added
-        +number updated
-        +number removed
-        +number failed
-        +string[] errors
-    }
-
-    class TraktrSettings {
-        +string clientId
-        +string clientSecret
-        +string accessToken
-        +string refreshToken
-        +number tokenExpiresAt
-        +string tmdbApiKey
-        +PosterSize posterSize
-        +string propertyPrefix
-        +string folder
-        +string filenameTemplate
-        +string movieNoteTemplate
-        +string showNoteTemplate
-        +boolean addTags
-        +string tagPrefix
-        +boolean addTagNotes
-        +boolean createTagNotes
-        +string tagNotesFolder
-        +boolean syncWatchlist
-        +boolean syncFavorites
-        +boolean syncWatched
-        +boolean syncRatings
-        +boolean syncMovies
-        +boolean syncShows
-        +boolean autoSyncEnabled
-        +number autoSyncIntervalMinutes
-        +boolean syncOnStartup
-        +boolean overwriteExisting
-        +boolean deleteRemovedItems
-    }
-
-    NormalizedItem --> TraktIds : ids
+  }
+}
 ```
 
-### Why `NormalizedItem` has optional source flags
+A few things are subtler than they look:
 
-`NormalizedItem` is built by `baseFromMovie` / `baseFromShow` with core metadata only. Source flags (`watchlist`, `watched`, `favorite`, `my_rating`) are then set conditionally during the merge phase. A movie that appears only in ratings will have `my_rating` set but `watchlist` undefined (not false — the distinction matters for `toFrontmatter`, which skips undefined/null fields).
+- **`this.settings` identity matters.** `SyncEngine` is constructed with
+  a reference to the settings object; refreshing settings from disk
+  (e.g. on visibility change) mutates that object IN PLACE so the
+  reference stays valid. `loadSettings()` and `refreshSettingsFromDisk()`
+  both follow this rule.
+- **Status bar items are desktop-only.** `runSyncWithProgress` drives
+  both the status bar (for desktop) and a persistent `Notice` (for
+  mobile). See [`ARCHITECTURE.md § 11`](ARCHITECTURE.md#11-note-rendering-pipeline)
+  for the rendering pipeline and `Notice` lifetime details.
+- **Commands cache their names at registration time.** Changing
+  `uiLanguage` requires a plugin reload to refresh command palette
+  labels. We document this; a cleaner fix would be re-registering
+  commands on language change, but that has its own gotchas around
+  hotkeys.
 
----
+## How to extend
 
-## 10. Common tasks
+### Add a new setting
 
-### Add a new sync source
-
-1. Add a `syncXxx: boolean` field to `TraktrSettings` in `settings.ts` and to `DEFAULT_SETTINGS`
-2. Add a toggle setting in `TraktrSettingTab.display()`
-3. Add a `fetchXxx(type, clientId, accessToken)` function in `trakt-api.ts` (reuse `fetchPaginated`)
-4. Inside `fetchAndMergeMovies` / `fetchAndMergeShows` in `sync-engine.ts`, add the new fetch to the `Promise.all` array and a loop to merge the results into the map
-
-### Add a new frontmatter field
-
-1. Add the field to `NormalizedItem` in `types.ts` (optional `?:` if not always present)
-2. Populate it in `baseFromMovie` or `baseFromShow`, or in the relevant merge loop
-3. Add `data[${p}fieldname] = ...` in `buildFrontmatterData` in `note-renderer.ts`
-4. Optionally add it to `buildTemplateContext` if you want a `{{variable}}` for templates
+1. Add the field + type to `TraktrSettings` in `settings.ts`
+2. Add a default to `DEFAULT_SETTINGS`
+3. Add a UI control in `TraktrSettingTab.display()` with appropriate i18n
+   keys
+4. Add the i18n strings to `src/i18n.ts` (en + zh-CN)
+5. Wire the field into wherever it's read — usually `sync-engine.ts` or
+   `note-renderer.ts`
+6. If the setting is user-configurable but rarely changed, document in
+   `docs/MANUAL.md` (and translations)
 
 ### Add a new template variable
 
-1. Add an entry to the object returned by `buildTemplateContext` in `note-renderer.ts`
-2. Document it in the user manual (`doc/MANUAL.md`)
-3. That's it — `renderTemplate` picks it up automatically
+1. Compute the value in `buildTemplateContext` in `note-renderer.ts`
+2. Document it in `docs/MANUAL.md` § Template variables (and 3 translations)
+3. Optionally add it to one or more bundled default templates in
+   `settings.ts`
 
-### Change the note file-naming scheme
+### Add a new sync source
 
-Edit `buildFilename` in `sync-engine.ts`. The function calls `renderTemplate` with a context of `{title, year, imdb_id, trakt_id}` and then `sanitizeFilename`. To add more variables, expand that context object.
+1. Add the relevant Trakt endpoint in `src/trakt-api.ts`
+2. Add a `syncXxx: boolean` setting + UI toggle
+3. Extend `fetchAndMergeMovies` / `fetchAndMergeShows` in `sync-engine.ts`
+   to fetch and merge into the `merged` map
+4. If the source produces a new flag on `NormalizedItem`, update the
+   types and `buildFrontmatterData` / `buildTemplateContext`
 
-### Debugging a sync
+### Add a new translation
 
-The sync result object (`SyncResult`) accumulates errors in `result.errors`. Individual item failures are caught and counted in `result.failed` rather than aborting the whole sync. To see all errors, open the developer console (`Cmd+Opt+I` on Mac) — errors are also printed there via the failure path in `reconcileType`.
+User-facing docs (README / SETUP / MANUAL) live in `docs/i18n/`. See
+[`docs/i18n/index.md`](i18n/index.md) for the contribution flow.
 
-The Trakt API returns paginated results with `X-Pagination-Page-Count` in the response header. If a user has a very large library, `fetchPaginated` will loop through all pages before returning.
+Plugin runtime UI (settings, commands, notices) lives in `src/i18n.ts`.
+Currently `en` + `zh-CN` only; expanding requires translating the
+~100-key string table and adding the language code to the **Plugin UI
+language** dropdown in `src/settings.ts`. Open an issue / PR if you
+want a specific language.
 
-### Token expiry edge case
+### Add a release
 
-If `ensureValidToken` throws (e.g. refresh token is also expired), the sync catches it at the top level and shows a Notice. The user will need to disconnect and reconnect via the settings tab. The tokens are cleared from settings automatically by `ensureValidToken` on refresh failure.
+```bash
+npm run release 0.x.y
+```
+
+That script (in `scripts/release.sh`) bumps versions, builds, commits,
+tags, pushes, and creates a draft GitHub Release with the three asset
+files attached. Edit the draft to add release notes, then publish from
+the GitHub UI. See [`scripts/release.sh`](../scripts/release.sh) for
+exit codes and `RELEASE_SKIP_*` env var escape hatches.
+
+## Testing
+
+Single-file smoke harness: `tests/i18n.smoke.ts`. No test framework —
+inline `assertEq` / `assertTrue`. Run with:
+
+```bash
+npm run test:i18n
+```
+
+When adding tests, add them at the bottom of the file as a new
+numbered section (`[N]`). Async tests go in the IIFE at the very end
+because top-level await is incompatible with our CommonJS bundle. See
+[`ARCHITECTURE.md § 12`](ARCHITECTURE.md#12-testing-approach) for
+philosophy and what's deliberately not tested.
+
+## Conventions
+
+These are documented in [`../CLAUDE.md`](../CLAUDE.md) for AI assistants
+to follow but apply to humans too:
+
+- All HTTP uses `requestUrl` from the `obsidian` module, never `fetch`
+- Frontmatter keys are prefixed with `settings.propertyPrefix` (default
+  `trakt_`)
+- Template `{{variables}}` are unprefixed for readability
+- Items are keyed by `"type:traktId"` (e.g. `"movie:123"`) to avoid
+  cross-type ID collisions
+- All user-facing strings go through `getTranslator(lang)` from
+  `src/i18n.ts`
+- Original (English) metadata is always preserved on `NormalizedItem`
+  as `originalTitle / originalOverview / originalTagline /
+  originalGenres` so tags and tag-note paths stay stable across
+  language switches
+
+## Where to look next
+
+- [`ARCHITECTURE.md`](ARCHITECTURE.md) — module layout, sync flow,
+  data structures, caching layers
+- [`specs/`](specs/) — design rationale per major change; start with
+  the index in [`specs/README.md`](specs/README.md)
+- [`CHANGELOG.md`](CHANGELOG.md) — what shipped when, condensed
+- [`SETUP.md`](SETUP.md) and [`MANUAL.md`](MANUAL.md) — user-facing
+  reference; useful when implementing or explaining settings

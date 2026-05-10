@@ -1,0 +1,205 @@
+# Changelog
+
+Notable changes per release. The plugin follows [semver](https://semver.org/)
+loosely — `0.x.y` is the pre-stable iteration line; the major bump to
+`1.0.0` will land once the feature set is verified end-to-end and the
+plugin is submitted to Obsidian's official Community Plugins directory.
+
+For the full design rationale behind major changes, see [`specs/`](specs/).
+
+## 0.2.0 — 2026-05-10
+
+**Major: incremental sync.** Steady-state sync wall time drops from
+3-5 minutes to under 10 seconds for typical libraries.
+
+### Added
+
+- **TMDB metadata cache.** Each `(type, tmdbId, language)` triple is
+  cached in `data.json` after first fetch, with a configurable TTL
+  (default 90 days, ±5 days jitter so entries don't all expire on the
+  same day) and lazy stale-while-revalidate semantics. Cache survives
+  device-to-device sync. New setting: **TMDB cache TTL**. New button:
+  **Clear TMDB cache**.
+- **Incremental Trakt history fetch.** Sync now stores the
+  aggregated history state in `data.json` (per-show + per-movie watch
+  timestamps, plus the set of every event id seen). Each subsequent
+  sync queries `/sync/history?start_at=lastIncrementalSyncAt` and
+  merges new events into the stored state. Watching a single new
+  episode now costs ~1 Trakt history call instead of ~150.
+- **Periodic full history refresh** for deletion detection. Every
+  `historyFullRefreshIntervalDays` (default 7), the next sync re-pulls
+  the full history without `start_at`, compares the event-id set
+  against `knownEventIds`, and rebuilds state from scratch when
+  events were deleted on Trakt's side. New setting:
+  **History full-refresh interval**. New command:
+  **Traktr: Force full history refresh**.
+- **Settings auto-reload on app focus.** The plugin re-reads
+  `data.json` from disk when Obsidian becomes visible again (e.g. when
+  the user switches back from another app on iPhone after their Mac
+  finished a sync). No more "I have to disable + re-enable the plugin
+  to see settings my Mac just synced over."
+- **`docs/ARCHITECTURE.md`** — comprehensive technical reference.
+- **`docs/specs/`** — design spec folder; [0001](specs/0001-incremental-sync.md)
+  documents the 0.2.0 work.
+- **`docs/CHANGELOG.md`** — this file.
+
+### Changed
+
+- README "Acknowledgements" section reframed across all 9 languages —
+  the project is now its own architecture, not a direct fork of
+  upstream code.
+- LICENSE annotations simplified to plain `Copyright (c) … (url)`
+  notices side by side; both apply, both preserved.
+
+### Migration
+
+The first 0.2.0 sync is the same cost as a 0.1.x sync (cold cache, no
+history state). Subsequent syncs are fast. No manual action required;
+fields default to the right values when missing from `data.json`.
+
+See [spec 0001](specs/0001-incremental-sync.md) for the full design
+trade-offs.
+
+## 0.1.4 — 2026-05-10
+
+**Fix: live sync progress visible on mobile.**
+
+The 0.1.3 progress reporting only updated the desktop status bar.
+Obsidian's `addStatusBarItem()` is documented as desktop-only; on iOS /
+Android, calling `.setText()` is a silent no-op. The user reported that
+tapping **Traktr: Sync** on iPhone looked completely silent — no
+visible progress until the final notice.
+
+Fix: every progress tick now also drives a persistent `Notice` (created
+with `duration=0` so it stays on screen, then updated in-place via
+`Notice.setMessage()`). The notice is hidden when sync finishes,
+including in the error path.
+
+## 0.1.3 — 2026-05-10
+
+**Major: TMDB title/poster fallback + sync progress + Bases docs.**
+
+### TMDB title fallback
+
+User report: most movie titles came back as English even with metadata
+language set to `zh-CN`. Root cause: TMDB moderators sometimes lock the
+`title` field on a `zh-CN` translation row to blank (especially for
+movies without an official mainland release); the API does not
+auto-fall-back to other Chinese variants.
+
+Fix: switched to `?language=X&append_to_response=translations` and
+added a client-side picker that walks the translations array. For
+`zh-CN` we try **CN → TW → HK → SG → any other zh entry**. Same pattern
+Jellyfin / Radarr / tinyMediaManager all use.
+
+### TMDB poster fallback
+
+Same root cause — TMDB returns `null` for `poster_path` on movies
+without a poster tagged in the requested language. Fix: when a
+language-specific request returns null, retry without the language
+parameter to get the default poster.
+
+### Sync progress
+
+Replaced the `Promise.all` burst over all items with a
+bounded-concurrency pool (5 in flight). Live status bar updates during
+sync. Reduced TMDB rate-limit pressure for 1000+ item libraries.
+
+### Obsidian Bases support
+
+Documentation only — `trakt_poster_url` already works in Bases card
+view (Obsidian 1.9.3+) as a raw external URL. Added a "View in Bases"
+section to all 9 README languages.
+
+### Title / Tagline customization clarification
+
+MANUAL.md (4 languages) now has a "Common customizations" subsection
+explaining that title is `{{title}}` in the body template (no separate
+field), and tagline format is fully editable in the Movie template.
+
+## 0.1.2 — 2026-05-10
+
+**Docs only**: full restructure + multi-language docs system.
+
+- Moved `doc/` → `docs/`; added `docs/screenshots/` and `docs/i18n/`
+- Wrote new English `docs/SETUP.md` (Trakt + TMDB API key flow,
+  troubleshooting)
+- Translations matrix:
+  - README × 9 languages: en + zh-CN + zh-TW + ja + ko + fr + de + es + it
+  - SETUP × 4 languages: en + zh-CN + zh-TW + ja
+  - MANUAL × 4 languages: en + zh-CN + zh-TW + ja
+- Added `docs/i18n/index.md` as the navigation hub
+- Redesigned README: badges, language switcher, feature sections with
+  inline code examples, expandable install methods, roadmap
+
+## 0.1.1 — 2026-05-09
+
+**Fix: `{{watch_history}}` body section now updates in subsequent syncs.**
+
+The default sync mode (`Overwrite existing note body` = off) only
+updated frontmatter on existing notes — but `{{watch_history}}` is
+rendered into the body. Result: watch history was frozen at note-
+creation time and never reflected new episodes you watched after that.
+
+Fix: machine-managed section markers using Obsidian's native `%% … %%`
+comment syntax. The watch-history block is now wrapped in
+`%% trakt:watch-history:start %%` … `%% trakt:watch-history:end %%`.
+On every sync, when **Sync watch history (detailed)** is on, the engine
+finds these markers and replaces what's between them. Content outside
+the markers is never touched.
+
+Notes created on 0.1.0 don't have markers yet; on the next sync after
+upgrading to 0.1.1 the engine auto-appends a marker-wrapped Watch
+History section to the end of each note's body.
+
+## 0.1.0 — 2026-05-09
+
+**First pre-stable release.** Forked from sarimabbas/traktr at upstream
+tag 1.5.2 and substantially reworked. Three new feature areas on top
+of the upstream sync engine:
+
+### Detailed watch history
+
+- New **Sync watch history (detailed)** toggle pulls Trakt's
+  `/sync/history` endpoint and aggregates per-episode (or per-movie)
+  watch timestamps
+- Renders inline in the note body via `{{watch_history}}` and
+  `{{watch_history_list}}` template variables
+- Re-watches listed comma-separated; episodes sorted by season then
+  episode
+
+### Metadata localization
+
+- New **Metadata language** setting translates `title` / `overview` /
+  `tagline` / `genres` via TMDB (Trakt translations as fallback when
+  no TMDB key)
+- English originals preserved in `trakt_original_*` frontmatter fields
+- Tags + tag-note paths always stay in English so existing Dataview
+  queries keep working unchanged
+
+### Bilingual UI + translated templates
+
+- Plugin UI language picker (en / zh-CN) covering settings tab, command
+  palette, notice popups, auth modal — ~90 string keys in
+  `src/i18n.ts`
+- Note template language picker (mirrors metadata-language preset
+  list). Bundled translations: English, Simplified Chinese, Traditional
+  Chinese; other codes fall back to English
+
+### Repository
+
+- Distinct plugin id (`obsidian-sync-trakt` vs upstream `traktr`) — both
+  can coexist in the same vault
+- Full upstream commit history preserved; this release branches from
+  upstream commit `03fe853`
+
+---
+
+## Versioning policy
+
+While in `0.x.y`, **patch bumps** (0.1.x) are used for any change that
+ships, including bug fixes, new features, and docs. Minor bumps
+(`0.2.0`, `0.3.0`) are reserved for changes substantial enough to merit
+a [design spec](specs/) entry — this is a soft signal that the
+codebase took a meaningful architectural step. The first `1.0.0`
+release will follow standard semver from then on.
