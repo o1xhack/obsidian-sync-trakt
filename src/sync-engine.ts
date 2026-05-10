@@ -201,14 +201,91 @@ async function ensureFolder(app: App, path: string): Promise<void> {
   }
 }
 
-function buildFilename(item: NormalizedItem, template: string): string {
+/**
+ * Render a filename for an item using the user's filenameTemplate.
+ *
+ * `titleOverride` lets the disambiguation logic substitute a richer title
+ * (e.g. `"重生 (Born Again)"` or `"重生 (Born Again) [157810]"`) without
+ * changing what `{{title}}` means everywhere else. When the user's template
+ * doesn't include `{{title}}`, the override is silently ignored — which is
+ * fine: a custom template that omits title is presumably already producing
+ * unique filenames via other variables.
+ */
+export function buildFilename(
+  item: NormalizedItem,
+  template: string,
+  titleOverride?: string,
+): string {
   const context: Record<string, unknown> = {
-    title: item.title,
+    title: titleOverride ?? item.title,
     year: item.year,
     imdb_id: item.ids.imdb || "",
     trakt_id: item.ids.trakt,
   };
   return sanitizeFilename(renderTemplate(template, context));
+}
+
+/**
+ * [0.3.1] Resolve filename collisions by progressively disambiguating.
+ *
+ * Background: with metadata localization, common-translation titles
+ * (e.g. "重生" for both "Born Again" and "Reborn") can produce the same
+ * filename for distinct Trakt items. Without disambiguation, the second
+ * `vault.create()` throws "File already exists" and the user sees a
+ * recurring per-sync failure for that item.
+ *
+ * Strategy — three tiers, returning the FIRST one whose filename is free:
+ *
+ *  - **Tier 0** (default): `{{title}} ({{year}})` → e.g. `重生 (2020)`
+ *  - **Tier 1** (only when originalTitle differs from title): inject the
+ *    English original alongside the localized title →
+ *    `重生 (Born Again) (2020)`. Doesn't help when localization is off
+ *    (originalTitle === title), so we skip straight to Tier 2 in that case.
+ *  - **Tier 2** (last-resort, guaranteed unique since Trakt IDs are
+ *    globally unique): append `[trakt_id]` →
+ *    `重生 (Born Again) [157810] (2020)` or `重生 [157810] (2020)`.
+ *
+ * The augmentation always goes into the `{{title}}` slot — the year /
+ * trakt_id / imdb_id positions in the user's template stay where the
+ * user put them. Result: for the default template, year stays at the end
+ * (matching the user's existing notes' visual convention).
+ *
+ * Pure function: `isTaken(filename)` is the only side-effecting input,
+ * making the policy fully unit-testable without an Obsidian vault.
+ */
+export function disambiguatedFilename(
+  item: NormalizedItem,
+  template: string,
+  isTaken: (filename: string) => boolean,
+): { filename: string; tier: 0 | 1 | 2 } {
+  // Tier 0
+  const tier0 = buildFilename(item, template);
+  if (!isTaken(tier0)) return { filename: tier0, tier: 0 };
+
+  // Tier 1 — only meaningful when originalTitle is actually different.
+  // When localization is off (or the title happens to be the same in both
+  // languages, e.g. proper nouns), skip directly to tier 2.
+  const hasDistinctOriginal =
+    !!item.originalTitle && item.originalTitle !== item.title;
+  if (hasDistinctOriginal) {
+    const tier1 = buildFilename(
+      item,
+      template,
+      `${item.title} (${item.originalTitle})`,
+    );
+    if (!isTaken(tier1)) return { filename: tier1, tier: 1 };
+  }
+
+  // Tier 2 — trakt_id is unique, so this WILL be free unless the user has
+  // a file we don't know about. Format depends on whether tier 1 was an
+  // option:
+  //   with original title:    重生 (Born Again) [157810] (2020)
+  //   without original title: 重生 [157810] (2020)
+  const tier2Title = hasDistinctOriginal
+    ? `${item.title} (${item.originalTitle}) [${item.ids.trakt}]`
+    : `${item.title} [${item.ids.trakt}]`;
+  const tier2 = buildFilename(item, template, tier2Title);
+  return { filename: tier2, tier: 2 };
 }
 
 /**
@@ -673,8 +750,26 @@ export class SyncEngine {
         const existingFile = localNotes.get(key);
 
         if (!existingFile) {
-          // CREATE
-          const filename = buildFilename(item, this.settings.filenameTemplate);
+          // CREATE — with two-tier filename disambiguation (spec 0.3.1).
+          // The plugin keys items by `(type, trakt_id)` internally, so we
+          // already know this Trakt id has no existing note. But the
+          // FILENAME may still collide with another item that happens to
+          // share the same default `{{title}} ({{year}})` string —
+          // localized titles like "重生" / "Reborn" / "Be Reborn" all
+          // collapse to "重生" under zh-CN.
+          const { filename, tier } = disambiguatedFilename(
+            item,
+            this.settings.filenameTemplate,
+            (candidate) =>
+              !!this.app.vault.getAbstractFileByPath(
+                normalizePath(`${folderPath}/${candidate}.md`),
+              ),
+          );
+          if (tier > 0) {
+            console.warn(
+              `[Traktr] Filename collision for "${item.title}" (${item.type} ${item.ids.trakt}); using tier-${tier} fallback: ${filename}.md`,
+            );
+          }
           const filePath = normalizePath(`${folderPath}/${filename}.md`);
           await this.app.vault.create(filePath, renderNote(item, this.settings));
           result.added++;

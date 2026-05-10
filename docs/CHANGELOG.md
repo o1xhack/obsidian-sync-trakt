@@ -7,6 +7,52 @@ plugin is submitted to Obsidian's official Community Plugins directory.
 
 For the full design rationale behind major changes, see [`specs/`](specs/).
 
+## 0.3.1 — 2026-05-10
+
+**Fix: filename collision when distinct items localize to the same
+title.**
+
+User report: a fifth show titled "重生" (Trakt id 159058) kept failing
+to sync with `Failed to sync "重生" (show 159058): File already exists`.
+Root cause: the user's vault already had four other notes whose
+localized title was "重生" — distinct shows whose Chinese-translated
+titles happened to collapse to the same string. The default
+`{{title}} ({{year}})` filename template produced `重生 (2020).md` for
+the fifth item, colliding with an existing file. `vault.create()`
+threw, the item was logged as failed, every subsequent sync hit the
+same error.
+
+This is a structural risk that grows as more users enable metadata
+localization — common-translation titles are exactly the cases
+localization improves the UI for, but they also increase filename
+collisions for distinct underlying items.
+
+### Added
+
+- **Two-tier filename disambiguation** in the CREATE branch:
+  - **Tier 0** (default): `{{title}} ({{year}})` — `重生 (2020)`
+  - **Tier 1** (only if `originalTitle` differs from `title`): inject
+    English original — `重生 (Born Again) (2020)`
+  - **Tier 2** (always succeeds — Trakt ids are globally unique):
+    append `[trakt_id]` — `重生 (Born Again) [157810] (2020)` (or
+    `重生 [159058] (2020)` when tier 1 isn't available because the
+    item lacks a distinct originalTitle).
+  - The augmentation always goes into the `{{title}}` slot, so year /
+    trakt_id positions in the user's custom template stay where the
+    user put them.
+  - Logged to console with the tier number when a fallback fires, so
+    debugging is easy.
+- **6 new smoke tests** (cases 31-36) — buildFilename with
+  titleOverride, all three tiers, same-title edge case, empty
+  originalTitle. Total test count: 221 (was 208).
+
+### Migration
+
+No data migration. Existing notes are unaffected — the disambiguation
+only runs when CREATING a new note. The 5th "重生" that's been failing
+to sync will land at `重生 (Born Again) (2020).md` (or similar) on the
+next sync.
+
 ## 0.3.0 — 2026-05-10
 
 **Major: diff-based write.** Sync no longer touches every note's mtime

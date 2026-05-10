@@ -46,6 +46,7 @@ import {
   getIncrementalStartAt,
 } from "../src/history-state";
 import { processWithConcurrency } from "../src/utils";
+import { buildFilename, disambiguatedFilename } from "../src/sync-engine";
 import {
   EMPTY_HISTORY_STATE,
   type HistoryState,
@@ -1613,6 +1614,161 @@ void (async () => {
       renderedOnce,
       "syncWatchedDetail off → returns input unchanged",
     );
+  }
+
+  // ── Test 31-33: spec 0.3.1 filename disambiguation ─────────────────────
+  // When metadata localization collapses distinct items to the same display
+  // title (e.g. "重生" for both "Born Again" and "Reborn"), the default
+  // {{title}} ({{year}}) filename collides. Disambiguation must:
+  //   - skip the fallback when no collision exists (tier 0)
+  //   - inject originalTitle when one is available and distinct (tier 1)
+  //   - append [trakt_id] as last-resort (tier 2)
+  // Critical: failing to fall back = recurring per-sync error for the user.
+
+  console.log("\n[31] buildFilename — titleOverride substitutes into {{title}} slot");
+  {
+    const item: NormalizedItem = {
+      ...makeMovie(),
+      title: "重生",
+      originalTitle: "Born Again",
+      year: 2020,
+    };
+
+    assertEq(
+      buildFilename(item, "{{title}} ({{year}})"),
+      "重生 (2020)",
+      "default rendering uses item.title",
+    );
+    assertEq(
+      buildFilename(item, "{{title}} ({{year}})", "重生 (Born Again)"),
+      "重生 (Born Again) (2020)",
+      "titleOverride substitutes the {{title}} slot only — year stays at end",
+    );
+    assertEq(
+      buildFilename(item, "{{year}} - {{title}}", "重生 [157810]"),
+      "2020 - 重生 [157810]",
+      "titleOverride works with non-default templates too",
+    );
+  }
+
+  console.log("\n[32] disambiguatedFilename — no collision returns tier 0");
+  {
+    const item: NormalizedItem = {
+      ...makeMovie(),
+      title: "重生",
+      originalTitle: "Born Again",
+      year: 2020,
+    };
+    const result = disambiguatedFilename(
+      item,
+      "{{title}} ({{year}})",
+      () => false, // nothing is taken
+    );
+    assertEq(result.filename, "重生 (2020)", "tier 0 filename");
+    assertEq(result.tier, 0, "tier === 0 when no collision");
+  }
+
+  console.log("\n[33] disambiguatedFilename — tier 1 fallback uses originalTitle");
+  {
+    const item: NormalizedItem = {
+      ...makeMovie(),
+      title: "重生",
+      originalTitle: "Born Again",
+      ids: { trakt: 157810, slug: "born-again", imdb: "tt12015636", tmdb: 100857 },
+      year: 2020,
+    };
+    // Pretend "重生 (2020)" already exists (the user's existing note for
+    // a different show that also localizes to "重生" in 2020).
+    const taken = new Set(["重生 (2020)"]);
+    const result = disambiguatedFilename(
+      item,
+      "{{title}} ({{year}})",
+      (fn) => taken.has(fn),
+    );
+    assertEq(
+      result.filename,
+      "重生 (Born Again) (2020)",
+      "tier 1 inserts originalTitle between localized title and year",
+    );
+    assertEq(result.tier, 1, "tier === 1 when only base collides");
+  }
+
+  console.log("\n[34] disambiguatedFilename — tier 2 appends trakt_id");
+  {
+    const item: NormalizedItem = {
+      ...makeMovie(),
+      title: "重生",
+      originalTitle: "Born Again",
+      ids: { trakt: 157810, slug: "born-again", imdb: "tt12015636", tmdb: 100857 },
+      year: 2020,
+    };
+    // Both tier 0 and tier 1 are taken → fall through to tier 2.
+    const taken = new Set([
+      "重生 (2020)",
+      "重生 (Born Again) (2020)",
+    ]);
+    const result = disambiguatedFilename(
+      item,
+      "{{title}} ({{year}})",
+      (fn) => taken.has(fn),
+    );
+    assertEq(
+      result.filename,
+      "重生 (Born Again) [157810] (2020)",
+      "tier 2 inserts originalTitle + trakt_id",
+    );
+    assertEq(result.tier, 2, "tier === 2 when tier 1 also collides");
+  }
+
+  console.log("\n[35] disambiguatedFilename — same-title edge case skips tier 1");
+  {
+    // When localization is OFF or when the item happens to have the same
+    // value for title and originalTitle (e.g. proper nouns like "Heat"),
+    // tier 1 would produce the SAME filename as tier 0 — so we skip it.
+    const item: NormalizedItem = {
+      ...makeMovie(),
+      title: "Heat",
+      originalTitle: "Heat", // same — tier 1 wouldn't disambiguate
+      ids: { trakt: 99999, slug: "heat-1995", imdb: "tt0113277", tmdb: 949 },
+      year: 1995,
+    };
+    const taken = new Set(["Heat (1995)"]);
+    const result = disambiguatedFilename(
+      item,
+      "{{title}} ({{year}})",
+      (fn) => taken.has(fn),
+    );
+    assertEq(
+      result.filename,
+      "Heat [99999] (1995)",
+      "tier 2 without originalTitle: just title + [trakt_id]",
+    );
+    assertEq(result.tier, 2, "tier === 2 (tier 1 was skipped — would be no-op)");
+  }
+
+  console.log("\n[36] disambiguatedFilename — empty originalTitle treated as same");
+  {
+    // Defensive: items where originalTitle is "" (empty string) should
+    // also skip tier 1, since injecting "(  )" would be ugly.
+    const item: NormalizedItem = {
+      ...makeMovie(),
+      title: "重生",
+      originalTitle: "", // edge case: missing or empty
+      ids: { trakt: 159058, slug: "unknown", imdb: "tt0", tmdb: 0 },
+      year: 2020,
+    };
+    const taken = new Set(["重生 (2020)"]);
+    const result = disambiguatedFilename(
+      item,
+      "{{title}} ({{year}})",
+      (fn) => taken.has(fn),
+    );
+    assertEq(
+      result.filename,
+      "重生 [159058] (2020)",
+      "empty originalTitle skips tier 1, goes straight to tier-2-without-original",
+    );
+    assertEq(result.tier, 2, "tier === 2");
   }
 
   console.log(`\n${"=".repeat(60)}`);
