@@ -1,9 +1,14 @@
 name: Release Obsidian plugin
 
+# Triggers on any pushed tag, AND can be manually re-run from the Actions
+# tab. Idempotent: if a Release already exists at the tag (typically
+# because scripts/release.sh created it locally), this workflow exits
+# early without re-uploading or overwriting assets.
 on:
   push:
     tags:
       - "*"
+  workflow_dispatch:
 
 jobs:
   build:
@@ -11,24 +16,53 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Use Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: "18.x"
+          node-version: "22.x"
+
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            echo "name=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          else
+            # workflow_dispatch — find the latest tag reachable from HEAD
+            echo "name=$(git describe --tags --abbrev=0 || echo '')" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip if release already exists
+        id: check
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${{ steps.tag.outputs.name }}"
+          if [ -z "$tag" ]; then
+            echo "No tag resolved — nothing to do."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists (likely created locally) — skipping build + upload."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Build plugin
+        if: steps.check.outputs.skip != 'true'
         run: |
           npm install
           npm run build
 
       - name: Create release
+        if: steps.check.outputs.skip != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          tag="${GITHUB_REF#refs/tags/}"
-
+          tag="${{ steps.tag.outputs.name }}"
           gh release create "$tag" \
             --title="$tag" \
             --draft \
