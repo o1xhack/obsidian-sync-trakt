@@ -7,6 +7,36 @@ plugin is submitted to Obsidian's official Community Plugins directory.
 
 For the full design rationale behind major changes, see [`specs/`](specs/).
 
+## 0.5.3 — 2026-05-11
+
+**Tweak plugin description to pass Obsidian directory submission bot.**
+
+The submission bot for the Community Plugins directory rejected our
+PR with:
+
+> ❌ Please don't include `Obsidian` in the plugin description
+
+Our manifest description was:
+
+> "Sync your Trakt.tv watchlist, watch history, favorites, and
+> ratings into Obsidian notes — with metadata localization and
+> detailed per-episode watch timestamps."
+
+Replacing "Obsidian notes" with "Markdown notes" — both accurate,
+the latter slightly more general (and bot-compliant).
+
+### Changed
+
+- `manifest.json` `description`: replaced "Obsidian notes" with
+  "Markdown notes". Character count: 162 (well under the 250-char
+  cap).
+- `package.json` `description`: same substitution for consistency.
+
+### Migration
+
+None. Cosmetic text-only change. No runtime behavior, no settings
+schema, no data layout impact.
+
 ## 0.5.2 — 2026-05-11
 
 **Auto-clean the legacy plugin folder after migration.**
