@@ -2,7 +2,7 @@
 
 > 🌐 **English** · [简体中文](i18n/SETUP.zh-CN.md) · [繁體中文](i18n/SETUP.zh-TW.md) · [日本語](i18n/SETUP.ja.md)
 
-Walk-through for getting Obsidian Sync Trakt connected: creating a Trakt
+Walk-through for getting Sync Trakt connected: creating a Trakt
 OAuth application, getting a TMDB API key, configuring the plugin, and
 running your first sync.
 
@@ -13,7 +13,7 @@ Required so the plugin can authorize against your Trakt account.
 1. Sign in at [trakt.tv](https://trakt.tv) (free account is fine)
 2. Open <https://trakt.tv/oauth/applications> → **New Application**
 3. Fill the form:
-   - **Name** — anything, e.g. `Obsidian Sync Trakt`
+   - **Name** — anything, e.g. `Sync Trakt`
    - **Redirect URI** — must be **exactly** `urn:ietf:wg:oauth:2.0:oob` ⚠️ — this
      is the device-flow magic string. One character off and Connect will fail
      with a 401
@@ -52,7 +52,7 @@ The v3 key stays accessible at <https://www.themoviedb.org/settings/api>.
 ## 3. Configure the plugin
 
 After installing the plugin (see [README → Install](../README.md#-install)),
-open **Settings → Obsidian Sync Trakt**.
+open **Settings → Sync Trakt**.
 
 ### Authentication
 

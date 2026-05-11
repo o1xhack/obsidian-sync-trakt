@@ -7,6 +7,58 @@ plugin is submitted to Obsidian's official Community Plugins directory.
 
 For the full design rationale behind major changes, see [`specs/`](specs/).
 
+## 0.5.1 — 2026-05-11
+
+**Rename display name: "Obsidian Sync Trakt" → "Sync Trakt".**
+
+After 0.4.0 changed the plugin `id` from `obsidian-sync-trakt` to
+`sync-trakt`, BRAT installs leave **both folders** in place — the
+legacy folder is preserved as a downgrade safety net (per spec 0004).
+Both folders contain a `manifest.json` declaring the same display
+name "Obsidian Sync Trakt", so Obsidian's plugin list showed **two
+identical entries** with no way to tell them apart. Users couldn't
+identify which was the active one (new `sync-trakt` getting BRAT
+updates) and which was the abandoned legacy.
+
+This release renames the display name on the active plugin so the two
+become visually distinguishable.
+
+### Changed
+
+- **`manifest.json` `name`**: `Obsidian Sync Trakt` → `Sync Trakt`.
+  After upgrade, the plugin list shows:
+  - "Obsidian Sync Trakt" → legacy plugin in `obsidian-sync-trakt/`
+    (frozen at the last 0.3.x you installed; no further updates)
+  - "Sync Trakt" → active plugin in `sync-trakt/` (BRAT keeps
+    updating this one)
+- **All 9 README H1 + prose mentions** updated from "Obsidian Sync
+  Trakt" to "Sync Trakt". CHANGELOG entries from earlier releases
+  keep their historical names — that's what the plugin was called
+  at the time.
+- **MANUAL.md + 3 translations + SETUP.md + 3 translations +
+  DEVELOPER.md** updated to use the new name.
+
+### Migration
+
+Nothing to migrate. The rename is a label change only — `id` stayed
+at `sync-trakt`, data lives in the same folder, all stored settings
+preserved. After upgrade, you can finally:
+
+1. Confirm the new "Sync Trakt" plugin works (sync runs, settings
+   intact from the 0.4.0 migration)
+2. **Disable** the legacy "Obsidian Sync Trakt" plugin
+3. **Manually delete** `<vault>/.obsidian/plugins/obsidian-sync-trakt/`
+   to clean up. Optional but recommended once you're sure the new
+   plugin is healthy.
+
+### Why this wasn't done in 0.4.0
+
+Spec 0004 deliberately deferred the display-name rename: the bot
+doesn't check display name (so the submission was unblocked), and we
+preferred to minimize the scope of one release. Real-world feedback
+from the 0.4.0 → 0.5.0 BRAT upgrade flow showed the dual-entry
+confusion clearly enough that the rename is now worth doing.
+
 ## 0.5.0 — 2026-05-11
 
 **Device-local settings with a per-setting sync toggle.** Some settings

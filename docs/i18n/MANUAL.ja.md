@@ -1,4 +1,4 @@
-# Obsidian Sync Trakt — ユーザーマニュアル
+# Sync Trakt — ユーザーマニュアル
 
 > 🌐 [English](../MANUAL.md) · [简体中文](MANUAL.zh-CN.md) · [繁體中文](MANUAL.zh-TW.md) · **日本語**
 
@@ -27,7 +27,7 @@
 1. [最新リリース](https://github.com/o1xhack/obsidian-sync-trakt/releases/latest) から `main.js`、`manifest.json`、`styles.css` をダウンロード
 2. vault に `.obsidian/plugins/obsidian-sync-trakt/` フォルダを作成
 3. 3 つのファイルをそのフォルダにコピー
-4. Obsidian を開く → 設定 → コミュニティプラグイン → **Obsidian Sync Trakt** を有効化
+4. Obsidian を開く → 設定 → コミュニティプラグイン → **Sync Trakt** を有効化
 
 または [BRAT](https://github.com/TfTHacker/obsidian42-brat) 経由で：beta プラグイン `o1xhack/obsidian-sync-trakt` を追加。
 
@@ -38,7 +38,7 @@
 ### 3a. Trakt アプリケーションを作成
 
 1. [trakt.tv](https://trakt.tv) にサインインし、**Settings → Your API Apps → New Application** へ
-2. 任意の名前を付ける（例：「Obsidian Sync Trakt」）
+2. 任意の名前を付ける（例：「Sync Trakt」）
 3. **Redirect URI** に `urn:ietf:wg:oauth:2.0:oob` を入力
 4. 保存。**Client ID** と **Client Secret** をコピー
 

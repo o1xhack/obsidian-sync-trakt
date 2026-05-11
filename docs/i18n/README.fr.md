@@ -1,4 +1,4 @@
-# Obsidian Sync Trakt
+# Sync Trakt
 
 [![Latest release](https://img.shields.io/github/v/release/o1xhack/obsidian-sync-trakt?include_prereleases&label=release&color=7c3aed)](https://github.com/o1xhack/obsidian-sync-trakt/releases)
 [![Total downloads](https://img.shields.io/github/downloads/o1xhack/obsidian-sync-trakt/total?color=7c3aed)](https://github.com/o1xhack/obsidian-sync-trakt/releases)
@@ -78,7 +78,7 @@ Filtrer par `trakt_type = "movie"` / `"show"`, trier par `trakt_year` / `trakt_r
 ## 🚀 Démarrage rapide
 
 1. Installez via [BRAT](https://github.com/TfTHacker/obsidian42-brat) → **Add a beta plugin for testing** → `o1xhack/obsidian-sync-trakt`
-2. Paramètres → **Obsidian Sync Trakt** → entrez vos clés API Trakt + TMDB ([guide SETUP](../SETUP.md))
+2. Paramètres → **Sync Trakt** → entrez vos clés API Trakt + TMDB ([guide SETUP](../SETUP.md))
 3. Palette de commandes → **Traktr: Sync**
 
 ## 🔑 Clés API : ce que chacune déverrouille
@@ -121,7 +121,7 @@ BRAT vérifiera les mises à jour à chaque lancement d'Obsidian et récupérera
 
 1. Téléchargez `main.js`, `manifest.json`, `styles.css` depuis le [dernier release](https://github.com/o1xhack/obsidian-sync-trakt/releases/latest)
 2. Placez les trois fichiers dans `<votre-vault>/.obsidian/plugins/obsidian-sync-trakt/`
-3. Paramètres → Community plugins → activez **Obsidian Sync Trakt**
+3. Paramètres → Community plugins → activez **Sync Trakt**
 
 </details>
 

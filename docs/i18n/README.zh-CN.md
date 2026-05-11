@@ -1,4 +1,4 @@
-# Obsidian Sync Trakt
+# Sync Trakt
 
 [![Latest release](https://img.shields.io/github/v/release/o1xhack/obsidian-sync-trakt?include_prereleases&label=release&color=7c3aed)](https://github.com/o1xhack/obsidian-sync-trakt/releases)
 [![Total downloads](https://img.shields.io/github/downloads/o1xhack/obsidian-sync-trakt/total?color=7c3aed)](https://github.com/o1xhack/obsidian-sync-trakt/releases)
@@ -78,7 +78,7 @@ trakt_metadata_language: zh-CN
 ## 🚀 快速开始
 
 1. 通过 [BRAT](https://github.com/TfTHacker/obsidian42-brat) 安装 → **Add a beta plugin for testing** → `o1xhack/obsidian-sync-trakt`
-2. 设置 → **Obsidian Sync Trakt** → 填 Trakt + TMDB API key（[配置指南](SETUP.zh-CN.md)）
+2. 设置 → **Sync Trakt** → 填 Trakt + TMDB API key（[配置指南](SETUP.zh-CN.md)）
 3. 命令面板 → **Traktr: Sync**
 
 ## 🔑 API key 各自解锁什么
@@ -121,7 +121,7 @@ trakt_metadata_language: zh-CN
 
 1. 从 [Releases](https://github.com/o1xhack/obsidian-sync-trakt/releases/latest) 下载 `main.js`、`manifest.json`、`styles.css`
 2. 把三个文件放到 `<你的-vault>/.obsidian/plugins/obsidian-sync-trakt/`
-3. 设置 → 第三方插件 → 启用 **Obsidian Sync Trakt**
+3. 设置 → 第三方插件 → 启用 **Sync Trakt**
 
 </details>
 

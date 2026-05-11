@@ -2,7 +2,7 @@
 
 > 🌐 [English](../SETUP.md) · **简体中文** · [繁體中文](SETUP.zh-TW.md) · [日本語](SETUP.ja.md)
 
-把 Obsidian Sync Trakt 接入你账号的完整流程：创建 Trakt OAuth 应用、申请 TMDB API key、配置插件、跑第一次同步。
+把 Sync Trakt 接入你账号的完整流程：创建 Trakt OAuth 应用、申请 TMDB API key、配置插件、跑第一次同步。
 
 ## 1. Trakt — 创建 OAuth 应用
 
@@ -11,7 +11,7 @@
 1. 在 [trakt.tv](https://trakt.tv) 登录（免费账号即可）
 2. 打开 <https://trakt.tv/oauth/applications> → **New Application**
 3. 填表：
-   - **Name** —— 随便填，比如 `Obsidian Sync Trakt`
+   - **Name** —— 随便填，比如 `Sync Trakt`
    - **Redirect URI** —— 必须**严格**填 `urn:ietf:wg:oauth:2.0:oob` ⚠️ —— 这是设备授权流程的固定字符串，差一个字符 Connect 会直接 401
    - **Description / Website / Permissions** —— 可选，留默认即可
 4. 保存。页面会显示 **Client ID** 和 **Client Secret**（点 Secret 旁边的眼睛图标显示）
@@ -38,7 +38,7 @@
 
 ## 3. 配置插件
 
-装好插件后（见 [README → Install](README.zh-CN.md#-安装)），打开 **设置 → Obsidian Sync Trakt**。
+装好插件后（见 [README → Install](README.zh-CN.md#-安装)），打开 **设置 → Sync Trakt**。
 
 ### Authentication
 

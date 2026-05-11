@@ -1,4 +1,4 @@
-# Obsidian Sync Trakt — User Manual
+# Sync Trakt — User Manual
 
 > 🌐 **English** · [简体中文](i18n/MANUAL.zh-CN.md) · [繁體中文](i18n/MANUAL.zh-TW.md) · [日本語](i18n/MANUAL.ja.md)
 
@@ -26,7 +26,7 @@ Manual install:
 1. Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/o1xhack/obsidian-sync-trakt/releases/latest)
 2. In your vault, create the folder `.obsidian/plugins/obsidian-sync-trakt/`
 3. Copy the three files into that folder
-4. Open Obsidian → Settings → Community plugins → enable **Obsidian Sync Trakt**
+4. Open Obsidian → Settings → Community plugins → enable **Sync Trakt**
 
 Or via [BRAT](https://github.com/TfTHacker/obsidian42-brat): add the beta plugin
 `o1xhack/obsidian-sync-trakt`.

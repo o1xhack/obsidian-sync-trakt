@@ -1,4 +1,4 @@
-# Obsidian Sync Trakt
+# Sync Trakt
 
 [![Latest release](https://img.shields.io/github/v/release/o1xhack/obsidian-sync-trakt?include_prereleases&label=release&color=7c3aed)](https://github.com/o1xhack/obsidian-sync-trakt/releases)
 [![Total downloads](https://img.shields.io/github/downloads/o1xhack/obsidian-sync-trakt/total?color=7c3aed)](https://github.com/o1xhack/obsidian-sync-trakt/releases)
@@ -78,7 +78,7 @@ trakt_metadata_language: ko-KR
 ## 🚀 빠른 시작
 
 1. [BRAT](https://github.com/TfTHacker/obsidian42-brat) 으로 설치 → **Add a beta plugin for testing** → `o1xhack/obsidian-sync-trakt`
-2. 설정 → **Obsidian Sync Trakt** → Trakt + TMDB API 키 입력([설정 가이드](../SETUP.md))
+2. 설정 → **Sync Trakt** → Trakt + TMDB API 키 입력([설정 가이드](../SETUP.md))
 3. 명령 팔레트 → **Traktr: Sync**
 
 ## 🔑 API 키가 각각 잠금 해제하는 기능
@@ -121,7 +121,7 @@ trakt_metadata_language: ko-KR
 
 1. [최신 릴리스](https://github.com/o1xhack/obsidian-sync-trakt/releases/latest)에서 `main.js`, `manifest.json`, `styles.css` 다운로드
 2. 세 파일을 `<your-vault>/.obsidian/plugins/obsidian-sync-trakt/`에 배치
-3. 설정 → 커뮤니티 플러그인 → **Obsidian Sync Trakt** 활성화
+3. 설정 → 커뮤니티 플러그인 → **Sync Trakt** 활성화
 
 </details>
 

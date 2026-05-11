@@ -1,4 +1,4 @@
-# Obsidian Sync Trakt — 用户手册
+# Sync Trakt — 用户手册
 
 > 🌐 [English](../MANUAL.md) · **简体中文** · [繁體中文](MANUAL.zh-TW.md) · [日本語](MANUAL.ja.md)
 
@@ -26,7 +26,7 @@
 1. 从 [最新 release](https://github.com/o1xhack/obsidian-sync-trakt/releases/latest) 下载 `main.js`、`manifest.json`、`styles.css`
 2. 在你的 vault 里创建文件夹 `.obsidian/plugins/obsidian-sync-trakt/`
 3. 把三个文件复制进去
-4. 打开 Obsidian → 设置 → 第三方插件 → 启用 **Obsidian Sync Trakt**
+4. 打开 Obsidian → 设置 → 第三方插件 → 启用 **Sync Trakt**
 
 或通过 [BRAT](https://github.com/TfTHacker/obsidian42-brat)：添加 beta 插件 `o1xhack/obsidian-sync-trakt`。
 
@@ -37,7 +37,7 @@
 ### 3a. 创建 Trakt 应用
 
 1. 登录 [trakt.tv](https://trakt.tv)，去 **Settings → Your API Apps → New Application**
-2. 起个名字（比如 "Obsidian Sync Trakt"）
+2. 起个名字（比如 "Sync Trakt"）
 3. **Redirect URI** 填 `urn:ietf:wg:oauth:2.0:oob`
 4. 保存。复制 **Client ID** 和 **Client Secret**
 

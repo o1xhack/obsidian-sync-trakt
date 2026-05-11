@@ -24,7 +24,7 @@ Plug into a real Obsidian vault for manual testing:
 ln -s "$(pwd)" ~/path/to/test-vault/.obsidian/plugins/obsidian-sync-trakt
 # Run dev mode in another terminal
 npm run dev
-# In Obsidian: Settings → Community plugins → enable Obsidian Sync Trakt.
+# In Obsidian: Settings → Community plugins → enable Sync Trakt.
 # Reload Obsidian (Cmd+R) after each rebuild.
 ```
 

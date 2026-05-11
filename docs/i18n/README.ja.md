@@ -1,4 +1,4 @@
-# Obsidian Sync Trakt
+# Sync Trakt
 
 [![Latest release](https://img.shields.io/github/v/release/o1xhack/obsidian-sync-trakt?include_prereleases&label=release&color=7c3aed)](https://github.com/o1xhack/obsidian-sync-trakt/releases)
 [![Total downloads](https://img.shields.io/github/downloads/o1xhack/obsidian-sync-trakt/total?color=7c3aed)](https://github.com/o1xhack/obsidian-sync-trakt/releases)
@@ -78,7 +78,7 @@ trakt_metadata_language: ja-JP
 ## 🚀 クイックスタート
 
 1. [BRAT](https://github.com/TfTHacker/obsidian42-brat) でインストール → **Add a beta plugin for testing** → `o1xhack/obsidian-sync-trakt`
-2. 設定 → **Obsidian Sync Trakt** → Trakt + TMDB API キーを入力（[セットアップガイド](SETUP.ja.md)）
+2. 設定 → **Sync Trakt** → Trakt + TMDB API キーを入力（[セットアップガイド](SETUP.ja.md)）
 3. コマンドパレット → **Traktr: Sync**
 
 ## 🔑 API キーで何ができるか
@@ -121,7 +121,7 @@ trakt_metadata_language: ja-JP
 
 1. [最新の release](https://github.com/o1xhack/obsidian-sync-trakt/releases/latest) から `main.js`、`manifest.json`、`styles.css` をダウンロード
 2. 3 つのファイルを `<your-vault>/.obsidian/plugins/obsidian-sync-trakt/` に配置
-3. 設定 → コミュニティプラグイン → **Obsidian Sync Trakt** を有効化
+3. 設定 → コミュニティプラグイン → **Sync Trakt** を有効化
 
 </details>
 
