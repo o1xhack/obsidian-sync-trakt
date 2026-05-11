@@ -23,6 +23,20 @@ import { clearTmdbCache } from "./tmdb-api";
  */
 const LEGACY_PLUGIN_ID = "obsidian-sync-trakt";
 
+/**
+ * [0.5.2] Files we remove from the legacy folder after a successful
+ * migration. We DELIBERATELY keep `data.json` in place — it's the
+ * user's recovered state, and acts as a last-resort safety net if
+ * something goes wrong with the new folder (re-running migration is a
+ * no-op when our own data.json exists, so the safety net is read-only
+ * after this point).
+ *
+ * Deleting only the binaries removes the duplicate plugin entry from
+ * Obsidian's plugin list (no manifest.json = not recognized as a
+ * plugin) without sacrificing the recovery option.
+ */
+const LEGACY_BINARY_FILES = ["main.js", "manifest.json", "styles.css"];
+
 export default class TraktrPlugin extends Plugin {
   settings: TraktrSettings = { ...DEFAULT_SETTINGS };
   /**
@@ -41,6 +55,14 @@ export default class TraktrPlugin extends Plugin {
       "[Traktr] Plugin loaded. Connected:",
       !!this.settings.accessToken,
     );
+
+    // [0.5.2] If the legacy folder still has binary files lying around,
+    // delete them — but keep data.json. Runs on every launch and is
+    // idempotent (no-op when binaries are already gone), so it catches
+    // both fresh-migrated and previously-migrated devices uniformly.
+    // Fires AFTER loadSettings so migration (if needed) has completed
+    // and we're already running off the new folder's data.
+    void this.cleanupLegacyBinaries();
 
     this.syncEngine = new SyncEngine(this.app, this.settings, () =>
       this.saveSettings(),
@@ -331,7 +353,7 @@ export default class TraktrPlugin extends Plugin {
       );
       console.debug(
         `[Traktr] Migrated data.json from .obsidian/plugins/${LEGACY_PLUGIN_ID}/ ` +
-          `→ .obsidian/plugins/sync-trakt/. Old folder left in place; safe to delete manually after confirming.`,
+          `→ .obsidian/plugins/sync-trakt/. Binary files in the legacy folder will be cleaned up on this launch; data.json is preserved as a recovery safety net.`,
       );
       return parsed;
     } catch (e) {
@@ -340,6 +362,48 @@ export default class TraktrPlugin extends Plugin {
         e,
       );
       return null;
+    }
+  }
+
+  /**
+   * [0.5.2] Remove the binary files (main.js / manifest.json / styles.css)
+   * from the legacy `obsidian-sync-trakt` folder while keeping data.json
+   * untouched. Result:
+   *
+   *   - Obsidian no longer recognizes the legacy folder as a plugin
+   *     (no manifest.json), so the duplicate entry disappears from
+   *     Settings → Community plugins.
+   *   - data.json remains as a recovery snapshot if the user needs to
+   *     fall back. The folder is otherwise harmless cruft the user can
+   *     delete manually whenever they like.
+   *
+   * Idempotent and silent: missing files / permission errors are
+   * swallowed. Runs on every onload so it catches devices that
+   * migrated under 0.4.0-0.5.1 (when this cleanup didn't exist) on
+   * their next launch of 0.5.2+.
+   *
+   * Multi-device safety: each device runs this independently. When
+   * Mac runs it and the vault sync layer propagates the deletions to
+   * iPhone, iPhone's still-on-0.3.x plugin won't load on next launch
+   * (no manifest.json), but BRAT will then install 0.5.2 to the new
+   * `sync-trakt/` folder on iPhone, the migrateFromLegacyFolder code
+   * will find the still-intact data.json, and everything recovers.
+   */
+  private async cleanupLegacyBinaries(): Promise<void> {
+    const base = `${this.app.vault.configDir}/plugins/${LEGACY_PLUGIN_ID}`;
+    for (const file of LEGACY_BINARY_FILES) {
+      const path = normalizePath(`${base}/${file}`);
+      try {
+        if (await this.app.vault.adapter.exists(path)) {
+          await this.app.vault.adapter.remove(path);
+          console.debug(`[Traktr] Removed legacy binary: ${path}`);
+        }
+      } catch (e) {
+        // Permission denied / file locked / other adapter errors — best
+        // effort. Try again next launch. Never block plugin startup on
+        // cleanup failures.
+        console.debug(`[Traktr] Could not remove ${path}:`, e);
+      }
     }
   }
 

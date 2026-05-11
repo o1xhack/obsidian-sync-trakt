@@ -7,6 +7,76 @@ plugin is submitted to Obsidian's official Community Plugins directory.
 
 For the full design rationale behind major changes, see [`specs/`](specs/).
 
+## 0.5.2 — 2026-05-11
+
+**Auto-clean the legacy plugin folder after migration.**
+
+0.4.0 introduced a transparent data migration from
+`.obsidian/plugins/obsidian-sync-trakt/` to `sync-trakt/`, but kept
+the entire legacy folder around indefinitely "in case the user wants
+to revert". 0.5.1 renamed the display name so the two folders were at
+least visually distinguishable. Real-world feedback after the
+0.4.0 → 0.5.1 upgrade flow showed both problems were still real:
+
+- Users overwhelmingly don't manually delete the legacy folder, so
+  it persists forever as `.obsidian/plugins/` clutter
+- Even after the rename, having two Trakt-flavored plugin entries
+  (one frozen, one active) creates ongoing confusion
+
+This release deletes the legacy folder's binary files **automatically
+and keeps `data.json` as a recovery snapshot.**
+
+### Changed
+
+- **`onload()` now runs `cleanupLegacyBinaries()` unconditionally
+  after `loadSettings()`.** Removes `main.js`, `manifest.json`, and
+  `styles.css` from `.obsidian/plugins/obsidian-sync-trakt/` if they
+  exist. **data.json is intentionally preserved.**
+- After the cleanup:
+  - The legacy folder is no longer recognized as a plugin by Obsidian
+    (no manifest.json) → the duplicate entry **disappears from
+    Settings → Community plugins**
+  - `data.json` remains as a recovery snapshot if anything goes wrong
+    with the new folder
+  - User can delete the now-empty-ish folder manually whenever they
+    feel safe to — or just leave it; it's harmless
+
+### Safety properties
+
+- **Idempotent**: runs on every launch, no-ops when binaries are
+  already gone. Catches devices that migrated under 0.4.0-0.5.1
+  before this cleanup existed.
+- **Failure-silent**: permission denied, file locked, adapter errors
+  all caught via try/catch. Never blocks plugin startup. Retries
+  next launch.
+- **Multi-device-safe**: when Mac runs the cleanup and the vault sync
+  layer propagates the deletions to iPhone, iPhone (if still on 0.3.x)
+  will see its old plugin fail to load on next launch — but BRAT will
+  then install 0.5.2 to the NEW folder, the migration will run from
+  the still-intact data.json in the legacy folder, and everything
+  recovers transparently.
+- **data.json is never touched** — if you ever need to roll back, the
+  3 binary files can be re-downloaded from the 0.3.x release and
+  your state is right there.
+
+### Migration
+
+**Automatic.** Existing BRAT users on 0.4.0-0.5.1 will see the legacy
+folder's plugin entry disappear on the first 0.5.2 launch. Fresh
+0.5.2 installs are unaffected (no legacy folder exists).
+
+### Why this wasn't in 0.4.0
+
+Original spec 0004 had us err on the safe side: leave everything in
+place. The cost (clutter + ongoing confusion) turned out higher than
+the protected benefit (recovery for a rollback scenario almost no one
+hits). 0.5.2 corrects this by keeping the recovery snapshot
+(data.json) while removing the visual cruft (the binaries). Best of
+both.
+
+See [spec 0004](specs/0004-obsidian-directory-submission.md) §"Update:
+0.5.2 cleanup" for the full design + 4 new edge cases.
+
 ## 0.5.1 — 2026-05-11
 
 **Rename display name: "Obsidian Sync Trakt" → "Sync Trakt".**

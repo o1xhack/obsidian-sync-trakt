@@ -49,9 +49,10 @@ fixing it before public submission is the right time.
   data — Trakt tokens, TMDB cache, history state, all settings —
   migrated to the new folder path on first launch of 0.4.0,
   **transparently**, with a single one-time confirmation Notice
-- After migration, the old folder is **left in place** (not deleted)
-  as a safety net in case the user reverts. Cleanup is the user's
-  decision
+- After migration, **binary files in the old folder are removed**
+  (main.js / manifest.json / styles.css) so the duplicate entry
+  disappears from Obsidian's plugin list. **data.json is kept** as
+  a recovery safety net — see "Update: 0.5.2 cleanup" below
 - Submission to the directory is decoupled from this release — 0.4.0
   ships first, then the user manually submits the PR (this gives them
   control over the timing and PR description)
@@ -224,13 +225,101 @@ verification.
   pre-upgrade state (and possibly newer state if BRAT polled before
   the user reverted, but BRAT doesn't sync back)
 
+## Update: 0.5.2 cleanup
+
+The original 0.4.0 design kept the entire legacy folder around
+indefinitely. Real-world feedback after the 0.4.0 → 0.5.1 BRAT
+upgrade flow showed two issues:
+
+1. **Most users don't know to delete the legacy folder.** Without an
+   automated cleanup, it persists forever as dead weight, taking up
+   space in `.obsidian/plugins/` and (until 0.5.1's display-name
+   rename) showing as a duplicate entry in the plugin list.
+2. **Even with the rename**, the legacy plugin entry is still
+   discoverable and confusing — users see two "Trakt-ish" plugins and
+   don't know which is canonical, even when one is disabled.
+
+The fix in 0.5.2: **after successful migration, delete the legacy
+folder's binary files (`main.js`, `manifest.json`, `styles.css`) but
+keep `data.json`**.
+
+### Why this specific subset
+
+- **manifest.json deletion** is what makes Obsidian stop recognizing
+  the folder as a plugin → the duplicate entry disappears from
+  Settings → Community plugins. This is the primary user-visible win.
+- **main.js / styles.css** removed for tidiness; they're useless
+  without manifest.json anyway.
+- **data.json kept** as a recovery snapshot. If something goes
+  catastrophically wrong with the new folder, the user can re-install
+  the old version manually (download main.js + manifest.json +
+  styles.css from 0.3.4 release) and find their state intact.
+
+### Implementation
+
+A new `cleanupLegacyBinaries()` method runs unconditionally on every
+`onload`, **after** `loadSettings` (so migration has completed if it
+needed to). It's idempotent — missing files / locked files / permission
+errors are swallowed via try/catch and retried next launch. Never
+blocks plugin startup on cleanup failures.
+
+```typescript
+private async cleanupLegacyBinaries(): Promise<void> {
+  const base = `${this.app.vault.configDir}/plugins/${LEGACY_PLUGIN_ID}`;
+  for (const file of LEGACY_BINARY_FILES) {
+    const path = normalizePath(`${base}/${file}`);
+    try {
+      if (await this.app.vault.adapter.exists(path)) {
+        await this.app.vault.adapter.remove(path);
+      }
+    } catch (e) {
+      console.debug(`[Traktr] Could not remove ${path}:`, e);
+    }
+  }
+}
+```
+
+The unconditional execution (vs running only after migration) is
+deliberate: devices that migrated under 0.4.0-0.5.1 (before this
+cleanup existed) will get their legacy folders tidied on first
+launch of 0.5.2+. No special "I just migrated" flag needed.
+
+### Multi-device safety
+
+When one device runs the cleanup, the vault sync layer (Obsidian Sync,
+iCloud, etc.) propagates the binary deletions to other devices. For
+devices still on 0.3.x at that moment:
+
+1. The next time Obsidian launches on that device, it tries to load
+   the plugin from the legacy folder
+2. Without manifest.json, the plugin doesn't load
+3. BRAT auto-update detects the latest release at 0.5.2+, downloads
+   to the NEW folder (`sync-trakt/`) because the new manifest's id is
+   `sync-trakt`
+4. The new plugin's `migrateFromLegacyFolder` finds the still-intact
+   `data.json` in the legacy folder and migrates from it normally
+
+So the cleanup is safe even when triggered before all devices have
+upgraded. The window where a device shows "plugin failed to load" is
+typically invisible because BRAT runs immediately at launch.
+
+### Edge cases added to the matrix
+
+| # | Scenario | Behavior |
+|---|---|---|
+| 9 | 0.5.2 first launch on a device that migrated under 0.4.x or 0.5.x | `loadSettings()` returns existing migrated state (no re-migration); `cleanupLegacyBinaries()` runs unconditionally, removes any remaining legacy binaries, leaves data.json |
+| 10 | data.json was deleted but binaries still exist in legacy folder | Migration source missing, migration short-circuits with null; cleanup still removes binaries (idempotent); fresh-install fallback applies |
+| 11 | All legacy files already cleaned up | cleanupLegacyBinaries finds nothing to delete, all `exists()` checks return false, no-op |
+| 12 | User manually re-creates a binary file in the legacy folder (e.g. via Obsidian Sync conflict resolution dropping in a stale main.js) | Next launch cleanup removes it again. Idempotent across rounds |
+
 ## Future work
 
-- **Auto-delete legacy folder after N successful syncs** — could be
-  added in a later release once we're confident no users need to
-  revert. Not pressing.
+- **Auto-delete `data.json` after a grace period** — could happen in
+  a much later release (say N=5 from the rename), once the recovery
+  pathway is clearly no longer needed. Not pressing — empty data.json
+  file is tiny.
 - **Submission to directory** — process documented above; user
   executes manually after this release
-- **Display name change if reviewer requests** — 0.4.1 hotfix-style
-  release, no code changes, just `manifest.json` name field +
-  README sweep
+- **Display name change if reviewer requests** — addressed proactively
+  in 0.5.1 after real-world dual-entry confusion (independent of
+  reviewer feedback)
