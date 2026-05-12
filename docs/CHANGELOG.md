@@ -7,6 +7,85 @@ plugin is submitted to Obsidian's official Community Plugins directory.
 
 For the full design rationale behind major changes, see [`specs/`](specs/).
 
+## 0.6.0 — 2026-05-11
+
+**Tabbed settings UI + 8 new bundled template languages.**
+
+Two paired changes shipped together:
+
+### Added — Settings tab navigation (spec 0005)
+
+After 0.5.x the settings page was >1000 lines of Setting instances —
+hard to find anything especially on mobile. Refactored into 4
+top-of-page tabs (Notebook Navigator-style):
+
+  General | Notes | Sync | Daily Notes
+
+- **General** — Trakt auth + TMDB key/test/cache + Reset
+- **Notes** — Metadata language, UI language, template language,
+  folder, filename template, body templates, tags, tag notes
+- **Sync** — Sync sources + Sync behavior (auto-sync, startup,
+  overwrite, etc.) + History full-refresh + Clear history state
+- **Daily Notes** — placeholder in 0.6.0; populated by 0.7.0
+  (see spec 0006)
+
+Active tab persists per-device via `localStorage`
+(`sync-trakt:_activeSettingsTab`). Each Mac / iPhone remembers its
+own last-viewed tab.
+
+### Added — 8 new bundled template languages (spec 0007)
+
+Previously the Note template language dropdown listed 15 metadata
+locales but only 3 actually had bundled templates (en + zh-CN +
+zh-TW). Picking Japanese silently fell back to English — confusing
+UX.
+
+Fixed by:
+
+1. **Adding 16 new template constants** (8 movie + 8 show) for:
+   Japanese, Korean, French, German, Italian, Spanish, Portuguese
+   (BR), Russian. Total bundled coverage: 11 languages.
+2. **Filtering the template-language dropdown** to only show those
+   11. The "Custom" option (which had no effect for unsupported
+   languages anyway) is removed.
+
+Translations are hand-curated, not machine-translated. Section
+headings, bullet labels, punctuation all follow target-language
+conventions (full-width colons in JA, spaced colons in FR, etc.).
+
+The Metadata language dropdown stays at 15+ options + custom mode —
+TMDB genuinely supports those, this is now an intentional surface
+difference between the two dropdowns.
+
+### Changed
+
+- `getDefaultMovieTemplate(lang)` and `getDefaultShowTemplate(lang)`
+  recognize 11 locales (vs 3 previously). Both BCP-47 (`ja-JP`,
+  `ko-KR`, ...) and short codes (`ja`, `ko`, ...) resolve correctly.
+
+### Migration
+
+No migration needed. 0.5.x users whose `templateLanguage` was set to
+something like `ja-JP` (silently using English) will, on their first
+0.6.0 launch, get the actual Japanese template when their notes are
+next regenerated. Users with `templateLanguage="custom"` see the new
+filtered dropdown without the Custom option — their saved value
+stays in data.json until they pick something from the new list.
+
+### Tests
+
+27 new smoke cases verify:
+- All 8 new bundled languages return their own templates
+- Short codes alias to full locales (`ja` → `ja-JP`)
+- Unsupported locales (`tr-TR`) fall back to English correctly
+- Each new template contains its language's section headings
+- Tab i18n keys resolve in en + zh-CN
+
+**Total tests: 287 (was 260). All passing.**
+
+See [spec 0005](specs/0005-settings-ui-tabs.md) +
+[spec 0007](specs/0007-template-language-expansion.md) for design.
+
 ## 0.5.3 — 2026-05-11
 
 **Tweak plugin description to pass Obsidian directory submission bot.**

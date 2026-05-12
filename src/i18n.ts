@@ -11,6 +11,16 @@
 export type UiLanguage = "en" | "zh-CN";
 
 const STRINGS = {
+  // ── [0.6.0] Settings page tab labels ──
+  "tabs.general": { en: "General", "zh-CN": "通用" },
+  "tabs.notes":   { en: "Notes",   "zh-CN": "笔记" },
+  "tabs.sync":    { en: "Sync",    "zh-CN": "同步" },
+  "tabs.daily":   { en: "Daily Notes", "zh-CN": "日记" },
+  "tabs.daily.placeholder": {
+    en: "Daily Notes integration coming in 0.7.0.",
+    "zh-CN": "Daily Notes 集成功能将在 0.7.0 版本提供。",
+  },
+
   // ── Authentication section ──
   "auth.heading": { en: "Authentication", "zh-CN": "认证" },
   "auth.clientId.name": {

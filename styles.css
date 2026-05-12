@@ -46,6 +46,41 @@
   margin-bottom: 1em;
 }
 
+/* [0.6.0] Settings page tab navigation — see spec 0005. */
+.trakt-tab-bar {
+  display: flex;
+  gap: 0.25em;
+  margin-bottom: 1em;
+  border-bottom: 1px solid var(--background-modifier-border);
+  flex-wrap: wrap;
+}
+
+.trakt-tab {
+  padding: 0.5em 1em;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 1em;
+  border-radius: 0;
+}
+
+.trakt-tab:hover {
+  color: var(--text-normal);
+}
+
+.trakt-tab.is-active {
+  color: var(--text-normal);
+  border-bottom-color: var(--interactive-accent);
+}
+
+.trakt-daily-placeholder {
+  color: var(--text-muted);
+  font-style: italic;
+  margin: 2em 0;
+}
+
 /* [0.3.2] TMDB key Test button result line + missing-key warning banner. */
 .trakt-test-result {
   margin-top: 0.5em;

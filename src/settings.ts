@@ -97,6 +97,32 @@ const PRESET_LANGUAGE_VALUES: ReadonlySet<string> = new Set(
 );
 
 /**
+ * [0.6.0 / spec 0007] Languages that have bundled body templates AND
+ * Daily Notes verb translations. Different from METADATA_LANGUAGE_PRESETS
+ * because TMDB supports ~100 metadata locales while we only ship hand-
+ * curated templates for these 11. The template-language dropdown lists
+ * these (no "custom" option there — it would silently fall back to
+ * English which was the bug being fixed).
+ */
+export const BUNDLED_TEMPLATE_LANGUAGES: ReadonlyArray<readonly [string, string]> = [
+  ["", "Default (English)"],
+  ["zh-CN", "Chinese (Simplified, China)"],
+  ["zh-TW", "Chinese (Traditional, Taiwan)"],
+  ["ja-JP", "Japanese"],
+  ["ko-KR", "Korean"],
+  ["fr-FR", "French"],
+  ["de-DE", "German"],
+  ["it-IT", "Italian"],
+  ["es-ES", "Spanish"],
+  ["pt-BR", "Portuguese (Brazil)"],
+  ["ru-RU", "Russian"],
+];
+
+const BUNDLED_TEMPLATE_LANGUAGE_VALUES: ReadonlySet<string> = new Set(
+  BUNDLED_TEMPLATE_LANGUAGES.map(([v]) => v),
+);
+
+/**
  * Resolve the effective language code to use for translation requests.
  * Returns "" when localization is disabled (no preset selected, or "custom"
  * with no code typed).
@@ -126,11 +152,6 @@ export function getEffectiveTemplateLanguage(
     return (settings.customTemplateLanguage || "").trim();
   }
   return dropdown;
-}
-
-/** True when the template-language dropdown is set to "custom". */
-function isCustomTemplateLanguageMode(settings: TraktrSettings): boolean {
-  return (settings.templateLanguage || "").trim() === "custom";
 }
 
 export interface TraktrSettings {
@@ -408,23 +429,561 @@ export const DEFAULT_SHOW_TEMPLATE_ZH_TW = `![poster]({{poster_url}})
 
 `;
 
+// ── [0.6.0] Japanese (ja-JP) ──
+export const DEFAULT_MOVIE_TEMPLATE_JA = `![poster]({{poster_url}})
+
+> {{tagline}}
+
+## あらすじ
+{{overview}}
+
+## 詳細
+- **上映時間**：{{runtime}} 分
+- **ジャンル**：{{genres}}
+- **評価**：{{trakt_rating}}/10（{{trakt_votes}} 票）
+- **視聴年齢**：{{certification}}
+- **公開**：{{released}}
+
+## Trakt の状態
+- **観たい**：{{watchlist}}
+- **視聴済み**：{{watched}}（{{plays}} 回視聴、最終：{{last_watched_at}}）
+- **お気に入り**：{{favorite}}
+- **自分の評価**：{{my_rating}}/10
+
+{{watch_history}}
+
+## リンク
+- [Trakt]({{trakt_url}})
+- [IMDB]({{imdb_url}})
+
+## メモ
+
+`;
+
+export const DEFAULT_SHOW_TEMPLATE_JA = `![poster]({{poster_url}})
+
+## あらすじ
+{{overview}}
+
+## 詳細
+- **配信元**：{{network}}
+- **上映時間**：1 話あたり {{runtime}} 分
+- **エピソード数**：{{aired_episodes}} 話配信済み
+- **ジャンル**：{{genres}}
+- **評価**：{{trakt_rating}}/10（{{trakt_votes}} 票）
+- **視聴年齢**：{{certification}}
+- **ステータス**：{{status}}
+- **配信開始**：{{first_aired}}
+
+## Trakt の状態
+- **観たい**：{{watchlist}}
+- **視聴済み**：{{watched}}（{{plays}} 回視聴、最終：{{last_watched_at}}）
+- **お気に入り**：{{favorite}}
+- **自分の評価**：{{my_rating}}/10
+
+{{watch_history}}
+
+## リンク
+- [Trakt]({{trakt_url}})
+- [IMDB]({{imdb_url}})
+
+## メモ
+
+`;
+
+// ── [0.6.0] Korean (ko-KR) ──
+export const DEFAULT_MOVIE_TEMPLATE_KO = `![poster]({{poster_url}})
+
+> {{tagline}}
+
+## 줄거리
+{{overview}}
+
+## 상세 정보
+- **상영 시간**: {{runtime}} 분
+- **장르**: {{genres}}
+- **평점**: {{trakt_rating}}/10 ({{trakt_votes}} 표)
+- **시청 등급**: {{certification}}
+- **개봉**: {{released}}
+
+## Trakt 상태
+- **보고 싶음**: {{watchlist}}
+- **시청함**: {{watched}} ({{plays}} 회, 최근: {{last_watched_at}})
+- **즐겨찾기**: {{favorite}}
+- **내 평점**: {{my_rating}}/10
+
+{{watch_history}}
+
+## 링크
+- [Trakt]({{trakt_url}})
+- [IMDB]({{imdb_url}})
+
+## 내 메모
+
+`;
+
+export const DEFAULT_SHOW_TEMPLATE_KO = `![poster]({{poster_url}})
+
+## 줄거리
+{{overview}}
+
+## 상세 정보
+- **채널**: {{network}}
+- **상영 시간**: 회당 {{runtime}} 분
+- **회차**: {{aired_episodes}} 회 방영
+- **장르**: {{genres}}
+- **평점**: {{trakt_rating}}/10 ({{trakt_votes}} 표)
+- **시청 등급**: {{certification}}
+- **상태**: {{status}}
+- **첫 방영**: {{first_aired}}
+
+## Trakt 상태
+- **보고 싶음**: {{watchlist}}
+- **시청함**: {{watched}} ({{plays}} 회, 최근: {{last_watched_at}})
+- **즐겨찾기**: {{favorite}}
+- **내 평점**: {{my_rating}}/10
+
+{{watch_history}}
+
+## 링크
+- [Trakt]({{trakt_url}})
+- [IMDB]({{imdb_url}})
+
+## 내 메모
+
+`;
+
+// ── [0.6.0] French (fr-FR) ──
+export const DEFAULT_MOVIE_TEMPLATE_FR = `![poster]({{poster_url}})
+
+> {{tagline}}
+
+## Synopsis
+{{overview}}
+
+## Détails
+- **Durée** : {{runtime}} min
+- **Genres** : {{genres}}
+- **Note** : {{trakt_rating}}/10 ({{trakt_votes}} votes)
+- **Classification** : {{certification}}
+- **Sortie** : {{released}}
+
+## Statut Trakt
+- **À voir** : {{watchlist}}
+- **Vu** : {{watched}} ({{plays}} fois, dernière : {{last_watched_at}})
+- **Favori** : {{favorite}}
+- **Ma note** : {{my_rating}}/10
+
+{{watch_history}}
+
+## Liens
+- [Trakt]({{trakt_url}})
+- [IMDB]({{imdb_url}})
+
+## Mes notes
+
+`;
+
+export const DEFAULT_SHOW_TEMPLATE_FR = `![poster]({{poster_url}})
+
+## Synopsis
+{{overview}}
+
+## Détails
+- **Chaîne** : {{network}}
+- **Durée** : {{runtime}} min par épisode
+- **Épisodes diffusés** : {{aired_episodes}}
+- **Genres** : {{genres}}
+- **Note** : {{trakt_rating}}/10 ({{trakt_votes}} votes)
+- **Classification** : {{certification}}
+- **Statut** : {{status}}
+- **Première** : {{first_aired}}
+
+## Statut Trakt
+- **À voir** : {{watchlist}}
+- **Vu** : {{watched}} ({{plays}} fois, dernière : {{last_watched_at}})
+- **Favori** : {{favorite}}
+- **Ma note** : {{my_rating}}/10
+
+{{watch_history}}
+
+## Liens
+- [Trakt]({{trakt_url}})
+- [IMDB]({{imdb_url}})
+
+## Mes notes
+
+`;
+
+// ── [0.6.0] German (de-DE) ──
+export const DEFAULT_MOVIE_TEMPLATE_DE = `![poster]({{poster_url}})
+
+> {{tagline}}
+
+## Inhalt
+{{overview}}
+
+## Details
+- **Laufzeit**: {{runtime}} Min.
+- **Genres**: {{genres}}
+- **Bewertung**: {{trakt_rating}}/10 ({{trakt_votes}} Stimmen)
+- **Altersfreigabe**: {{certification}}
+- **Veröffentlicht**: {{released}}
+
+## Trakt-Status
+- **Möchte sehen**: {{watchlist}}
+- **Gesehen**: {{watched}} ({{plays}} mal, zuletzt: {{last_watched_at}})
+- **Favorit**: {{favorite}}
+- **Meine Bewertung**: {{my_rating}}/10
+
+{{watch_history}}
+
+## Links
+- [Trakt]({{trakt_url}})
+- [IMDB]({{imdb_url}})
+
+## Meine Notizen
+
+`;
+
+export const DEFAULT_SHOW_TEMPLATE_DE = `![poster]({{poster_url}})
+
+## Inhalt
+{{overview}}
+
+## Details
+- **Sender**: {{network}}
+- **Laufzeit**: {{runtime}} Min. pro Folge
+- **Folgen**: {{aired_episodes}} ausgestrahlt
+- **Genres**: {{genres}}
+- **Bewertung**: {{trakt_rating}}/10 ({{trakt_votes}} Stimmen)
+- **Altersfreigabe**: {{certification}}
+- **Status**: {{status}}
+- **Erstausstrahlung**: {{first_aired}}
+
+## Trakt-Status
+- **Möchte sehen**: {{watchlist}}
+- **Gesehen**: {{watched}} ({{plays}} mal, zuletzt: {{last_watched_at}})
+- **Favorit**: {{favorite}}
+- **Meine Bewertung**: {{my_rating}}/10
+
+{{watch_history}}
+
+## Links
+- [Trakt]({{trakt_url}})
+- [IMDB]({{imdb_url}})
+
+## Meine Notizen
+
+`;
+
+// ── [0.6.0] Italian (it-IT) ──
+export const DEFAULT_MOVIE_TEMPLATE_IT = `![poster]({{poster_url}})
+
+> {{tagline}}
+
+## Sinossi
+{{overview}}
+
+## Dettagli
+- **Durata**: {{runtime}} min
+- **Generi**: {{genres}}
+- **Voto**: {{trakt_rating}}/10 ({{trakt_votes}} voti)
+- **Classificazione**: {{certification}}
+- **Uscita**: {{released}}
+
+## Stato Trakt
+- **Da vedere**: {{watchlist}}
+- **Visto**: {{watched}} ({{plays}} volte, ultima: {{last_watched_at}})
+- **Preferito**: {{favorite}}
+- **Il mio voto**: {{my_rating}}/10
+
+{{watch_history}}
+
+## Link
+- [Trakt]({{trakt_url}})
+- [IMDB]({{imdb_url}})
+
+## Note personali
+
+`;
+
+export const DEFAULT_SHOW_TEMPLATE_IT = `![poster]({{poster_url}})
+
+## Sinossi
+{{overview}}
+
+## Dettagli
+- **Rete**: {{network}}
+- **Durata**: {{runtime}} min per episodio
+- **Episodi**: {{aired_episodes}} trasmessi
+- **Generi**: {{genres}}
+- **Voto**: {{trakt_rating}}/10 ({{trakt_votes}} voti)
+- **Classificazione**: {{certification}}
+- **Stato**: {{status}}
+- **Prima messa in onda**: {{first_aired}}
+
+## Stato Trakt
+- **Da vedere**: {{watchlist}}
+- **Visto**: {{watched}} ({{plays}} volte, ultima: {{last_watched_at}})
+- **Preferito**: {{favorite}}
+- **Il mio voto**: {{my_rating}}/10
+
+{{watch_history}}
+
+## Link
+- [Trakt]({{trakt_url}})
+- [IMDB]({{imdb_url}})
+
+## Note personali
+
+`;
+
+// ── [0.6.0] Spanish (es-ES) ──
+export const DEFAULT_MOVIE_TEMPLATE_ES = `![poster]({{poster_url}})
+
+> {{tagline}}
+
+## Sinopsis
+{{overview}}
+
+## Detalles
+- **Duración**: {{runtime}} min
+- **Géneros**: {{genres}}
+- **Calificación**: {{trakt_rating}}/10 ({{trakt_votes}} votos)
+- **Clasificación**: {{certification}}
+- **Estreno**: {{released}}
+
+## Estado de Trakt
+- **Quiero ver**: {{watchlist}}
+- **Visto**: {{watched}} ({{plays}} veces, última: {{last_watched_at}})
+- **Favorito**: {{favorite}}
+- **Mi calificación**: {{my_rating}}/10
+
+{{watch_history}}
+
+## Enlaces
+- [Trakt]({{trakt_url}})
+- [IMDB]({{imdb_url}})
+
+## Mis notas
+
+`;
+
+export const DEFAULT_SHOW_TEMPLATE_ES = `![poster]({{poster_url}})
+
+## Sinopsis
+{{overview}}
+
+## Detalles
+- **Cadena**: {{network}}
+- **Duración**: {{runtime}} min por episodio
+- **Episodios**: {{aired_episodes}} emitidos
+- **Géneros**: {{genres}}
+- **Calificación**: {{trakt_rating}}/10 ({{trakt_votes}} votos)
+- **Clasificación**: {{certification}}
+- **Estado**: {{status}}
+- **Estreno**: {{first_aired}}
+
+## Estado de Trakt
+- **Quiero ver**: {{watchlist}}
+- **Visto**: {{watched}} ({{plays}} veces, última: {{last_watched_at}})
+- **Favorito**: {{favorite}}
+- **Mi calificación**: {{my_rating}}/10
+
+{{watch_history}}
+
+## Enlaces
+- [Trakt]({{trakt_url}})
+- [IMDB]({{imdb_url}})
+
+## Mis notas
+
+`;
+
+// ── [0.6.0] Portuguese — Brazil (pt-BR) ──
+export const DEFAULT_MOVIE_TEMPLATE_PT = `![poster]({{poster_url}})
+
+> {{tagline}}
+
+## Sinopse
+{{overview}}
+
+## Detalhes
+- **Duração**: {{runtime}} min
+- **Gêneros**: {{genres}}
+- **Avaliação**: {{trakt_rating}}/10 ({{trakt_votes}} votos)
+- **Classificação**: {{certification}}
+- **Lançamento**: {{released}}
+
+## Status Trakt
+- **Quero ver**: {{watchlist}}
+- **Visto**: {{watched}} ({{plays}} vezes, última: {{last_watched_at}})
+- **Favorito**: {{favorite}}
+- **Minha avaliação**: {{my_rating}}/10
+
+{{watch_history}}
+
+## Links
+- [Trakt]({{trakt_url}})
+- [IMDB]({{imdb_url}})
+
+## Minhas notas
+
+`;
+
+export const DEFAULT_SHOW_TEMPLATE_PT = `![poster]({{poster_url}})
+
+## Sinopse
+{{overview}}
+
+## Detalhes
+- **Rede**: {{network}}
+- **Duração**: {{runtime}} min por episódio
+- **Episódios**: {{aired_episodes}} exibidos
+- **Gêneros**: {{genres}}
+- **Avaliação**: {{trakt_rating}}/10 ({{trakt_votes}} votos)
+- **Classificação**: {{certification}}
+- **Status**: {{status}}
+- **Estreia**: {{first_aired}}
+
+## Status Trakt
+- **Quero ver**: {{watchlist}}
+- **Visto**: {{watched}} ({{plays}} vezes, última: {{last_watched_at}})
+- **Favorito**: {{favorite}}
+- **Minha avaliação**: {{my_rating}}/10
+
+{{watch_history}}
+
+## Links
+- [Trakt]({{trakt_url}})
+- [IMDB]({{imdb_url}})
+
+## Minhas notas
+
+`;
+
+// ── [0.6.0] Russian (ru-RU) ──
+export const DEFAULT_MOVIE_TEMPLATE_RU = `![poster]({{poster_url}})
+
+> {{tagline}}
+
+## Описание
+{{overview}}
+
+## Подробности
+- **Длительность**: {{runtime}} мин
+- **Жанры**: {{genres}}
+- **Рейтинг**: {{trakt_rating}}/10 ({{trakt_votes}} голосов)
+- **Возрастной рейтинг**: {{certification}}
+- **Релиз**: {{released}}
+
+## Статус Trakt
+- **Хочу посмотреть**: {{watchlist}}
+- **Просмотрено**: {{watched}} ({{plays}} раз, последний: {{last_watched_at}})
+- **Избранное**: {{favorite}}
+- **Моя оценка**: {{my_rating}}/10
+
+{{watch_history}}
+
+## Ссылки
+- [Trakt]({{trakt_url}})
+- [IMDB]({{imdb_url}})
+
+## Мои заметки
+
+`;
+
+export const DEFAULT_SHOW_TEMPLATE_RU = `![poster]({{poster_url}})
+
+## Описание
+{{overview}}
+
+## Подробности
+- **Канал**: {{network}}
+- **Длительность**: {{runtime}} мин на серию
+- **Эпизодов**: {{aired_episodes}} вышло
+- **Жанры**: {{genres}}
+- **Рейтинг**: {{trakt_rating}}/10 ({{trakt_votes}} голосов)
+- **Возрастной рейтинг**: {{certification}}
+- **Статус**: {{status}}
+- **Премьера**: {{first_aired}}
+
+## Статус Trakt
+- **Хочу посмотреть**: {{watchlist}}
+- **Просмотрено**: {{watched}} ({{plays}} раз, последний: {{last_watched_at}})
+- **Избранное**: {{favorite}}
+- **Моя оценка**: {{my_rating}}/10
+
+{{watch_history}}
+
+## Ссылки
+- [Trakt]({{trakt_url}})
+- [IMDB]({{imdb_url}})
+
+## Мои заметки
+
+`;
+
 /**
  * Pick the bundled default movie template for a language code. Languages
  * without a bundled translation fall back to English — the user can still
  * customize the template by hand or pick a different `templateLanguage`.
+ *
+ * [0.6.0 / spec 0007] Bundled coverage expanded from 3 → 11 languages.
+ * Accepts both BCP-47 locale codes (ja-JP, ko-KR, …) and bare language
+ * codes (ja, ko, …) so users coming in via custom mode still resolve.
  */
 export function getDefaultMovieTemplate(lang: string): string {
-  const code = (lang || "").trim();
-  if (code === "zh-CN") return DEFAULT_MOVIE_TEMPLATE_ZH_CN;
-  if (code === "zh-TW" || code === "zh-HK") return DEFAULT_MOVIE_TEMPLATE_ZH_TW;
-  return DEFAULT_MOVIE_TEMPLATE_EN;
+  switch ((lang || "").trim().toLowerCase()) {
+    case "zh-cn": return DEFAULT_MOVIE_TEMPLATE_ZH_CN;
+    case "zh-tw":
+    case "zh-hk": return DEFAULT_MOVIE_TEMPLATE_ZH_TW;
+    case "ja-jp":
+    case "ja":    return DEFAULT_MOVIE_TEMPLATE_JA;
+    case "ko-kr":
+    case "ko":    return DEFAULT_MOVIE_TEMPLATE_KO;
+    case "fr-fr":
+    case "fr":    return DEFAULT_MOVIE_TEMPLATE_FR;
+    case "de-de":
+    case "de":    return DEFAULT_MOVIE_TEMPLATE_DE;
+    case "it-it":
+    case "it":    return DEFAULT_MOVIE_TEMPLATE_IT;
+    case "es-es":
+    case "es-mx":
+    case "es":    return DEFAULT_MOVIE_TEMPLATE_ES;
+    case "pt-br":
+    case "pt":    return DEFAULT_MOVIE_TEMPLATE_PT;
+    case "ru-ru":
+    case "ru":    return DEFAULT_MOVIE_TEMPLATE_RU;
+    default:      return DEFAULT_MOVIE_TEMPLATE_EN;
+  }
 }
 
 export function getDefaultShowTemplate(lang: string): string {
-  const code = (lang || "").trim();
-  if (code === "zh-CN") return DEFAULT_SHOW_TEMPLATE_ZH_CN;
-  if (code === "zh-TW" || code === "zh-HK") return DEFAULT_SHOW_TEMPLATE_ZH_TW;
-  return DEFAULT_SHOW_TEMPLATE_EN;
+  switch ((lang || "").trim().toLowerCase()) {
+    case "zh-cn": return DEFAULT_SHOW_TEMPLATE_ZH_CN;
+    case "zh-tw":
+    case "zh-hk": return DEFAULT_SHOW_TEMPLATE_ZH_TW;
+    case "ja-jp":
+    case "ja":    return DEFAULT_SHOW_TEMPLATE_JA;
+    case "ko-kr":
+    case "ko":    return DEFAULT_SHOW_TEMPLATE_KO;
+    case "fr-fr":
+    case "fr":    return DEFAULT_SHOW_TEMPLATE_FR;
+    case "de-de":
+    case "de":    return DEFAULT_SHOW_TEMPLATE_DE;
+    case "it-it":
+    case "it":    return DEFAULT_SHOW_TEMPLATE_IT;
+    case "es-es":
+    case "es-mx":
+    case "es":    return DEFAULT_SHOW_TEMPLATE_ES;
+    case "pt-br":
+    case "pt":    return DEFAULT_SHOW_TEMPLATE_PT;
+    case "ru-ru":
+    case "ru":    return DEFAULT_SHOW_TEMPLATE_RU;
+    default:      return DEFAULT_SHOW_TEMPLATE_EN;
+  }
 }
 
 /** Backward-compat aliases — anything that imported the old constant names
@@ -437,12 +996,17 @@ export const DEFAULT_SHOW_TEMPLATE = DEFAULT_SHOW_TEMPLATE_EN;
  * templateLanguage rewrites it; if not (= user-customized), we leave it
  * alone. */
 const ALL_DEFAULT_TEMPLATES: ReadonlyArray<string> = [
-  DEFAULT_MOVIE_TEMPLATE_EN,
-  DEFAULT_MOVIE_TEMPLATE_ZH_CN,
-  DEFAULT_MOVIE_TEMPLATE_ZH_TW,
-  DEFAULT_SHOW_TEMPLATE_EN,
-  DEFAULT_SHOW_TEMPLATE_ZH_CN,
-  DEFAULT_SHOW_TEMPLATE_ZH_TW,
+  DEFAULT_MOVIE_TEMPLATE_EN,    DEFAULT_SHOW_TEMPLATE_EN,
+  DEFAULT_MOVIE_TEMPLATE_ZH_CN, DEFAULT_SHOW_TEMPLATE_ZH_CN,
+  DEFAULT_MOVIE_TEMPLATE_ZH_TW, DEFAULT_SHOW_TEMPLATE_ZH_TW,
+  DEFAULT_MOVIE_TEMPLATE_JA,    DEFAULT_SHOW_TEMPLATE_JA,
+  DEFAULT_MOVIE_TEMPLATE_KO,    DEFAULT_SHOW_TEMPLATE_KO,
+  DEFAULT_MOVIE_TEMPLATE_FR,    DEFAULT_SHOW_TEMPLATE_FR,
+  DEFAULT_MOVIE_TEMPLATE_DE,    DEFAULT_SHOW_TEMPLATE_DE,
+  DEFAULT_MOVIE_TEMPLATE_IT,    DEFAULT_SHOW_TEMPLATE_IT,
+  DEFAULT_MOVIE_TEMPLATE_ES,    DEFAULT_SHOW_TEMPLATE_ES,
+  DEFAULT_MOVIE_TEMPLATE_PT,    DEFAULT_SHOW_TEMPLATE_PT,
+  DEFAULT_MOVIE_TEMPLATE_RU,    DEFAULT_SHOW_TEMPLATE_RU,
 ];
 
 function isDefaultTemplate(value: string): boolean {
@@ -501,12 +1065,57 @@ export const DEFAULT_SETTINGS: TraktrSettings = {
   historyFullRefreshIntervalDays: 7,
 };
 
+/**
+ * [0.6.0] Settings page tab ids — see spec 0005. Persisted per-device
+ * in localStorage so each Mac/iPhone remembers its own last-viewed tab.
+ */
+export type SettingsTabId = "general" | "notes" | "sync" | "daily";
+const SETTINGS_TABS: ReadonlyArray<SettingsTabId> = [
+  "general",
+  "notes",
+  "sync",
+  "daily",
+];
+const ACTIVE_TAB_STORAGE_KEY = "sync-trakt:_activeSettingsTab";
+
 export class TraktrSettingTab extends PluginSettingTab {
   plugin: TraktrPlugin;
+  private activeTab: SettingsTabId = "general";
 
   constructor(app: App, plugin: TraktrPlugin) {
     super(app, plugin);
     this.plugin = plugin;
+  }
+
+  /**
+   * [0.6.0] Render the top tab bar. Clicking switches `activeTab`,
+   * persists it to localStorage, and re-renders the whole settings UI.
+   * See spec 0005 §"Implementation skeleton".
+   */
+  private renderTabBar(parent: HTMLElement): void {
+    const t = getTranslator(this.plugin.settings.uiLanguage);
+    const bar = parent.createDiv({ cls: "trakt-tab-bar" });
+    for (const tabId of SETTINGS_TABS) {
+      const btn = bar.createEl("button", {
+        cls:
+          "trakt-tab" + (tabId === this.activeTab ? " is-active" : ""),
+        text: t(`tabs.${tabId}`),
+      });
+      btn.onclick = () => {
+        this.activeTab = tabId;
+        this.plugin.app.saveLocalStorage(ACTIVE_TAB_STORAGE_KEY, tabId);
+        this.display();
+      };
+    }
+  }
+
+  /** Load the active tab from localStorage, falling back to "general". */
+  private loadActiveTab(): SettingsTabId {
+    const raw: unknown = this.plugin.app.loadLocalStorage(ACTIVE_TAB_STORAGE_KEY);
+    if (typeof raw === "string" && (SETTINGS_TABS as readonly string[]).includes(raw)) {
+      return raw as SettingsTabId;
+    }
+    return "general";
   }
 
   /**
@@ -538,6 +1147,25 @@ export class TraktrSettingTab extends PluginSettingTab {
     containerEl.empty();
     const t = getTranslator(this.plugin.settings.uiLanguage);
 
+    // [0.6.0] Tab navigation at the top — see spec 0005. The body
+    // sections below are each gated by `this.activeTab` so only the
+    // selected tab's content renders. Reset section (at the bottom of
+    // the file) is also gated by "general" — it's logically part of the
+    // General tab even though it lives at the end of display() for
+    // historical reasons.
+    this.activeTab = this.loadActiveTab();
+    this.renderTabBar(containerEl);
+
+    if (this.activeTab === "daily") {
+      // 0.6.0 placeholder; 0.7.0 will populate this tab properly
+      containerEl.createEl("p", {
+        cls: "trakt-daily-placeholder",
+        text: t("tabs.daily.placeholder"),
+      });
+      return;
+    }
+
+    if (this.activeTab === "general") {
     // ── Authentication ──
     new Setting(containerEl).setName(t("auth.heading")).setHeading();
 
@@ -726,6 +1354,9 @@ export class TraktrSettingTab extends PluginSettingTab {
           }),
       );
 
+    }  // end of "general" tab — first half (Auth + TMDB)
+
+    if (this.activeTab === "notes") {
     // ── Localization ──
     new Setting(containerEl).setName(t("loc.heading")).setHeading();
 
@@ -816,32 +1447,29 @@ export class TraktrSettingTab extends PluginSettingTab {
       "uiLanguage",
     );
 
-    // Note template language — same dropdown shape as Metadata language
-    // (preset codes + Custom). Auto-rewrites unmodified default templates
-    // when the language changes; customized templates are preserved.
-    const tplDropdownValue = isCustomTemplateLanguageMode(this.plugin.settings)
-      ? "custom"
-      : PRESET_LANGUAGE_VALUES.has(this.plugin.settings.templateLanguage)
-        ? this.plugin.settings.templateLanguage
-        : this.plugin.settings.templateLanguage === ""
-          ? ""
-          : "custom";
+    // [0.6.0 / spec 0007] Note template language — only shows bundled
+    // languages (11). Previously reused METADATA_LANGUAGE_PRESETS (15
+    // entries) + a "custom" mode, which let users pick languages we'd
+    // silently fall back to English on. Confusing. Now: the dropdown
+    // shows exactly what's actually supported; if a user wants a
+    // language not on this list, they Reset the template to default
+    // (English) and customize manually.
+    //
+    // For 0.5.x users whose templateLanguage value isn't in the new
+    // 11-set, the dropdown shows them at "default" (empty value) on
+    // first 0.6.0 launch; their saved templateLanguage is preserved
+    // in data.json until they pick something from the new dropdown.
+    const tplDropdownValue = BUNDLED_TEMPLATE_LANGUAGE_VALUES.has(
+      this.plugin.settings.templateLanguage,
+    )
+      ? this.plugin.settings.templateLanguage
+      : "";
 
     const applyTemplateLanguageChange = async (newLang: string) => {
       // Only rewrite a saved template when it still matches one of the
-      // bundled defaults — i.e. the user hasn't customized it. We resolve
-      // through getDefault*Template() so a code without a bundled translation
-      // (e.g. ja-JP, ko-KR, fr-FR, custom code) falls back to English.
-      const movieDefault = getDefaultMovieTemplate(
-        newLang === "custom"
-          ? this.plugin.settings.customTemplateLanguage
-          : newLang,
-      );
-      const showDefault = getDefaultShowTemplate(
-        newLang === "custom"
-          ? this.plugin.settings.customTemplateLanguage
-          : newLang,
-      );
+      // bundled defaults — i.e. the user hasn't customized it.
+      const movieDefault = getDefaultMovieTemplate(newLang);
+      const showDefault = getDefaultShowTemplate(newLang);
       if (isDefaultTemplate(this.plugin.settings.movieNoteTemplate)) {
         this.plugin.settings.movieNoteTemplate = movieDefault;
       }
@@ -854,53 +1482,19 @@ export class TraktrSettingTab extends PluginSettingTab {
       .setName(t("loc.templateLanguage.name"))
       .setDesc(t("loc.templateLanguage.desc"))
       .addDropdown((dd) => {
-        for (const [value, label] of METADATA_LANGUAGE_PRESETS) {
+        for (const [value, label] of BUNDLED_TEMPLATE_LANGUAGES) {
           const localizedLabel =
             value === "" ? t("loc.metadataLanguage.default") : label;
           dd.addOption(value, localizedLabel);
         }
-        dd.addOption("custom", t("loc.metadataLanguage.custom"));
         dd.setValue(tplDropdownValue);
         dd.onChange(async (value) => {
-          if (value === "custom") {
-            const previous = this.plugin.settings.templateLanguage;
-            if (
-              previous &&
-              previous !== "custom" &&
-              !PRESET_LANGUAGE_VALUES.has(previous)
-            ) {
-              this.plugin.settings.customTemplateLanguage = previous;
-            }
-            this.plugin.settings.templateLanguage = "custom";
-          } else {
-            this.plugin.settings.templateLanguage = value;
-          }
-          await applyTemplateLanguageChange(
-            this.plugin.settings.templateLanguage,
-          );
+          this.plugin.settings.templateLanguage = value;
+          await applyTemplateLanguageChange(value);
           await this.plugin.saveSettings();
           this.display();
         });
       });
-
-    if (tplDropdownValue === "custom") {
-      new Setting(containerEl)
-        .setName(t("loc.customLanguage.name"))
-        .setDesc(t("loc.customLanguage.desc"))
-        .addText((text) =>
-          text
-            .setPlaceholder(t("loc.customLanguage.placeholder"))
-            .setValue(this.plugin.settings.customTemplateLanguage)
-            .onChange(async (value) => {
-              this.plugin.settings.customTemplateLanguage = value.trim();
-              // Re-resolve templates against the typed code on the fly, so
-              // that picking e.g. "zh-TW" via custom field does the same
-              // thing as picking it from the preset list.
-              await applyTemplateLanguageChange("custom");
-              await this.plugin.saveSettings();
-            }),
-        );
-    }
 
     // ── Notes ──
     new Setting(containerEl).setName(t("notes.heading")).setHeading();
@@ -1064,6 +1658,9 @@ export class TraktrSettingTab extends PluginSettingTab {
           }),
       );
 
+    }  // end of "notes" tab
+
+    if (this.activeTab === "sync") {
     // ── Sync sources ──
     new Setting(containerEl).setName(t("syncSources.heading")).setHeading();
 
@@ -1283,6 +1880,9 @@ export class TraktrSettingTab extends PluginSettingTab {
           }),
       );
 
+    }  // end of "sync" tab
+
+    if (this.activeTab === "general") {
     // ── Reset ──
     new Setting(containerEl).setName(t("reset.heading")).setHeading();
 
@@ -1320,5 +1920,6 @@ export class TraktrSettingTab extends PluginSettingTab {
             this.display();
           }),
       );
+    }  // end of "general" tab — second half (Reset)
   }
 }

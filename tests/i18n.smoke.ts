@@ -430,21 +430,89 @@ console.log(
     "zh-TW show → Traditional",
   );
 
-  // Other languages → English fallback
+  // [0.6.0 / spec 0007] 8 new bundled languages — Japanese, Korean, French,
+  // German, Italian, Spanish, Portuguese (BR), Russian. Each maps to its
+  // own template; only truly-unsupported codes fall back to English.
+  assertTrue(
+    getDefaultMovieTemplate("ja-JP") !== DEFAULT_MOVIE_TEMPLATE_EN,
+    "ja-JP no longer falls back to English (0.6.0 added bundled JA)",
+  );
+  assertTrue(
+    getDefaultMovieTemplate("ko-KR") !== DEFAULT_MOVIE_TEMPLATE_EN,
+    "ko-KR no longer falls back to English",
+  );
+  assertTrue(
+    getDefaultMovieTemplate("fr-FR") !== DEFAULT_MOVIE_TEMPLATE_EN,
+    "fr-FR no longer falls back to English",
+  );
+  assertTrue(
+    getDefaultMovieTemplate("de-DE") !== DEFAULT_MOVIE_TEMPLATE_EN,
+    "de-DE no longer falls back to English",
+  );
+  assertTrue(
+    getDefaultMovieTemplate("it-IT") !== DEFAULT_MOVIE_TEMPLATE_EN,
+    "it-IT no longer falls back to English",
+  );
+  assertTrue(
+    getDefaultMovieTemplate("es-ES") !== DEFAULT_MOVIE_TEMPLATE_EN,
+    "es-ES no longer falls back to English",
+  );
+  assertTrue(
+    getDefaultMovieTemplate("pt-BR") !== DEFAULT_MOVIE_TEMPLATE_EN,
+    "pt-BR no longer falls back to English",
+  );
+  assertTrue(
+    getDefaultMovieTemplate("ru-RU") !== DEFAULT_MOVIE_TEMPLATE_EN,
+    "ru-RU no longer falls back to English",
+  );
+
+  // Short codes resolve the same as full locales
   assertEq(
+    getDefaultMovieTemplate("ja"),
     getDefaultMovieTemplate("ja-JP"),
-    DEFAULT_MOVIE_TEMPLATE_EN,
-    "ja-JP → EN fallback (no bundled JP translation)",
+    "'ja' short code = 'ja-JP' full locale",
   );
-  assertEq(
-    getDefaultMovieTemplate("fr-FR"),
-    DEFAULT_MOVIE_TEMPLATE_EN,
-    "fr-FR → EN fallback",
-  );
+
+  // Truly-unsupported locales fall back to English
   assertEq(
     getDefaultMovieTemplate("tr-TR"),
     DEFAULT_MOVIE_TEMPLATE_EN,
-    "custom code → EN fallback",
+    "tr-TR (unsupported) → EN fallback",
+  );
+
+  // Content sanity: each new bundled template has its language's
+  // section heading (catches accidental copy-paste from English)
+  assertTrue(
+    getDefaultMovieTemplate("ja-JP").includes("## あらすじ"),
+    "ja-JP movie has 'あらすじ' (synopsis)",
+  );
+  assertTrue(
+    getDefaultMovieTemplate("ko-KR").includes("## 줄거리"),
+    "ko-KR movie has '줄거리' (synopsis)",
+  );
+  assertTrue(
+    getDefaultMovieTemplate("fr-FR").includes("## Synopsis"),
+    "fr-FR movie has 'Synopsis'",
+  );
+  assertTrue(
+    getDefaultMovieTemplate("de-DE").includes("## Inhalt"),
+    "de-DE movie has 'Inhalt'",
+  );
+  assertTrue(
+    getDefaultMovieTemplate("it-IT").includes("## Sinossi"),
+    "it-IT movie has 'Sinossi'",
+  );
+  assertTrue(
+    getDefaultMovieTemplate("es-ES").includes("## Sinopsis"),
+    "es-ES movie has 'Sinopsis'",
+  );
+  assertTrue(
+    getDefaultMovieTemplate("pt-BR").includes("## Sinopse"),
+    "pt-BR movie has 'Sinopse'",
+  );
+  assertTrue(
+    getDefaultMovieTemplate("ru-RU").includes("## Описание"),
+    "ru-RU movie has 'Описание'",
   );
 
   // Content sanity: each language's template contains its own characters
@@ -2004,6 +2072,28 @@ void (async () => {
       enSynced !== enLocal && zhSynced !== zhLocal,
       "synced and local tooltips actually differ in each language",
     );
+  }
+
+  // ── Test 45: spec 0005 tab labels ─────────────────────────────────────
+  console.log("\n[45] tab labels resolve in both UI languages");
+  {
+    const tabs = ["tabs.general", "tabs.notes", "tabs.sync", "tabs.daily"];
+    for (const key of tabs) {
+      const enLabel = t(key, "en");
+      const zhLabel = t(key, "zh-CN");
+      assertTrue(
+        enLabel.length > 0 && !enLabel.startsWith("tabs."),
+        `en: ${key} resolves`,
+      );
+      assertTrue(
+        zhLabel.length > 0 && !zhLabel.startsWith("tabs."),
+        `zh-CN: ${key} resolves`,
+      );
+      assertTrue(
+        enLabel !== zhLabel,
+        `${key}: en and zh-CN labels actually differ`,
+      );
+    }
   }
 
   console.log(`\n${"=".repeat(60)}`);
