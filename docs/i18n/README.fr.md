@@ -14,9 +14,13 @@
 ## ✨ Pourquoi ?
 
 - **Historique de visionnage détaillé** — quel épisode vous avez regardé exactement et quand, y compris les revisionnages, mis à jour à chaque nouvelle session
-- **Métadonnées dans 15+ langues** — traduction des titres / synopsis / accroches / genres via TMDB. Préréglages intégrés pour le chinois (CN / TW / HK), le japonais, le coréen, le français, l'allemand, l'espagnol (ES / MX), le portugais (BR), l'italien, le russe — plus un mode personnalisé acceptant tout code de locale BCP-47 pris en charge par TMDB. Les originaux anglais sont toujours préservés dans les champs frontmatter `*_original_*`
-- **Synchronisation incrémentale** _(0.2.0)_ — la première synchronisation amorce le cache TMDB local et l'état de l'historique Trakt ; les synchronisations suivantes ne récupèrent que ce qui a changé. Le temps de synchronisation en régime stable passe de quelques minutes à quelques secondes. Voir [spec 0001](../specs/0001-incremental-sync.md)
+- **Métadonnées dans 15+ langues** — traduction des titres / synopsis / accroches / genres via TMDB. Préréglages intégrés pour le chinois (CN / TW / HK), le japonais, le coréen, le français, l'allemand, l'espagnol (ES / MX), le portugais (BR), l'italien, le russe — plus un mode personnalisé acceptant toute locale prise en charge par TMDB. Les originaux anglais sont toujours préservés dans les champs frontmatter `*_original_*`
+- **Modèles de notes en 11 langues** _(0.6.0)_ — modèles intégrés faits main (en + zh-CN + zh-TW + ja + ko + fr + de + it + es + pt-BR + ru). Choisissez dans la nouvelle liste déroulante de langue de modèle ; changez à tout moment sans perdre vos personnalisations
+- **Interface des paramètres en onglets** _(0.6.0)_ — Général / Notes / Synchro / Daily Notes. Le dernier onglet consulté est mémorisé par appareil
+- **Intégration Daily Notes** _(0.7.0)_ — injecte automatiquement une ligne par événement dans votre Daily Note à chaque synchronisation (vu / ajouté à la watchlist / favori / noté), triées chronologiquement, dans la langue de modèle choisie. La zone délimitée par marqueurs est totalement isolée — le contenu en dehors n'est jamais modifié. Voir [spec 0006](../specs/0006-daily-notes-integration.md)
+- **Synchronisation incrémentale rapide** _(0.2.0)_ — la première synchronisation amorce le cache TMDB local et l'état de l'historique Trakt ; les synchronisations suivantes ne récupèrent que ce qui a changé. Le temps de synchronisation en régime stable passe de quelques minutes à quelques secondes. Voir [spec 0001](../specs/0001-incremental-sync.md)
 - **Écritures discrètes** _(0.3.0)_ — la synchronisation ne réécrit que les notes dont le contenu a réellement changé. Après avoir regardé un nouvel épisode, une bibliothèque de 1200 entrées écrit une seule note au lieu des 1200 — votre couche de synchronisation inter-appareils (Obsidian Sync / iCloud / Syncthing) arrête de re-téléverser toute la bibliothèque à chaque tour. Voir [spec 0002](../specs/0002-diff-based-write.md)
+- **Interrupteur cloud par paramètre** _(0.5.0)_ — choisissez quels paramètres se synchronisent entre appareils et lesquels restent locaux. Intervalle d'auto-sync, démarrage automatique, langue de l'interface — chacun peut rester local pour que votre Mac et votre iPhone ne se disputent pas. Voir [spec 0003](../specs/0003-device-local-settings.md)
 
 ## 🎬 Historique de visionnage détaillé
 
@@ -58,13 +62,34 @@ Les tags et chemins tag-note restent toujours en anglais — vos requêtes Datav
 
 ## 🌍 Interface du plugin + modèles de notes
 
-La localisation des métadonnées ci-dessus couvre de nombreuses langues ; l'**interface propre au plugin** est un axe distinct et plus modeste. **L'onglet des paramètres, la palette de commandes et les notifications** parlent actuellement **English** et **简体中文**. **Les modèles de notes intégrés** sont fournis en anglais, chinois simplifié (`zh-CN`) et chinois traditionnel (`zh-TW` / `zh-HK`) ; les autres codes de langue de modèle utilisent l'anglais comme repli — personnalisez manuellement pour l'instant, ou [ouvrez une issue](https://github.com/o1xhack/obsidian-sync-trakt/issues) pour demander une traduction intégrée. D'autres langues d'interface seront ajoutées à la demande.
+La localisation des métadonnées ci-dessus est un axe ; les surfaces propres au plugin en sont d'autres :
+
+- **L'onglet des paramètres, la palette de commandes et les notifications** parlent **English** et **简体中文**. D'autres langues d'interface à la demande — [ouvrez une issue](https://github.com/o1xhack/obsidian-sync-trakt/issues) si vous souhaitez en proposer une.
+- **Modèles de notes intégrés** _(0.6.0 — passés de 3 à 11)_ — anglais, chinois simplifié (zh-CN), chinois traditionnel (zh-TW / zh-HK), japonais, coréen, français, allemand, italien, espagnol, portugais (BR), russe. Faits main, pas traduits machine ; titres de section, libellés de listes et ponctuation suivent les conventions de chaque langue (deux-points pleine chasse en japonais, deux-points espacés en français, etc.). La liste déroulante de langue de modèle ne propose désormais que ces 11 langues ; les locales hors liste ne sont plus offertes (auparavant elles tombaient silencieusement sur l'anglais, ce qui prêtait à confusion).
 
 <!-- screenshot: bilingual-ui -->
 
+## 📅 Intégration Daily Notes _(0.7.0)_
+
+Insère automatiquement une ligne par événement dans votre Daily Note à chaque synchronisation — triées chronologiquement, dans la langue de modèle choisie. Couvre les épisodes vus, les ajouts à la watchlist, les favoris et les notes :
+
+```markdown
+%% trakt:daily:start %%
+10:00 — a regardé Low-IQ Crime (2026) S1E16, S1E17
+14:30 — ajouté à la watchlist The Dark Knight (2008)
+21:30 — noté 9/10 Reborn (2020)
+%% trakt:daily:end %%
+```
+
+Chaque type d'événement est conditionné par son interrupteur de source de synchro — si `Sync favorites` est désactivé, les événements de favoris n'apparaîtront pas non plus dans les Daily Notes. Les verbes (`watched` / `看了` / `視聴` / `시청` / `a regardé`…) suivent votre paramètre de **langue de modèle** sur les 11 langues intégrées.
+
+**Contrat de sécurité** : la zone délimitée par les marqueurs est totalement isolée — le contenu en dehors n'est **jamais modifié**. Les jours passés sont en ajout seul (marqueurs existants préservés) ; le jour actuel est réécrit pour que les événements récents apparaissent lors des synchros suivantes. Configurez le dossier + le format de nom de fichier (syntaxe Moment.js comme `YYYY-MM-DD` ou `YYYY/YYYY.MM.DD`) dans **Paramètres → Daily Notes**. Un bouton **Backfill** manuel couvre jusqu'à 30 jours passés. Voir [spec 0006](../specs/0006-daily-notes-integration.md).
+
 ## 🔄 Synchronisation multi-appareils
 
-L'état d'authentification — tokens Trakt, clé TMDB, tous les paramètres — vit dans `<vault>/.obsidian/plugins/obsidian-sync-trakt/data.json` et suit votre couche de synchronisation de vault. Configurez l'authentification une fois sur Mac, partagez-la avec iPhone via Obsidian Sync (avec `Plugin data` activé), Syncthing, iCloud + Advanced Data Protection, ou Cryptomator. **Le plugin ne stocke rien sur un serveur.**
+L'état d'authentification — tokens Trakt, clé TMDB, tous les paramètres — vit dans `<vault>/.obsidian/plugins/sync-trakt/data.json` et suit votre couche de synchronisation de vault. Configurez l'authentification une fois sur Mac, partagez-la avec iPhone via Obsidian Sync (avec `Plugin data` activé), Syncthing, iCloud + Advanced Data Protection, ou Cryptomator. Le plugin ne stocke rien sur un serveur.
+
+Depuis 0.5.0, **chaque paramètre peut individuellement se désinscrire de la synchronisation inter-appareils** via une petite icône cloud à côté de lui (actuellement exposée pour `Sync on startup` / `Auto-sync` / `Auto-sync interval` / `Plugin UI language`). Utile par exemple si vous voulez l'auto-sync toutes les 30 min sur Mac mais jamais sur iPhone.
 
 ## 📊 Visualisation dans Obsidian Bases
 
@@ -159,15 +184,17 @@ Puis copiez `main.js`, `manifest.json`, `styles.css` dans `<vault>/.obsidian/plu
 
 ## 🗺️ Feuille de route
 
-- [x] Synchronisation détaillée de l'historique par épisode
-- [x] Localisation des métadonnées sur 15+ langues préréglées + tout code de locale pris en charge par TMDB via le mode personnalisé
-- [x] Interface bilingue (en + zh-CN) ; d'autres langues à la demande
-- [x] Modèles de notes par défaut traduits (en + zh-CN + zh-TW)
-- [x] Cache de métadonnées TMDB (0.2.0) — éviter de re-télécharger lors d'un changement de langue, synchro stable en quelques secondes
-- [x] Récupération incrémentale de l'historique Trakt (0.2.0) — ne récupère que les nouveaux événements depuis la dernière synchro
-- [x] Écritures différentielles (0.3.0) — ne réécrit que les notes réellement modifiées, plus de tempête de synchro inter-appareils
-- [ ] Soumission au répertoire Community Plugins d'Obsidian
-- [ ] Plus de traductions UI (ja / ko / fr / ...) selon la demande
+Versions majeures depuis le fork (chronologique) :
+
+- [x] **0.1** — Fork initial. Historique de visionnage détaillé avec horodatages par épisode, localisation des métadonnées via TMDB + chaîne de repli Trakt, interface bilingue (en + zh-CN), modèles de notes traduits (en + zh-CN + zh-TW), id de plugin distinct de l'upstream pour coexistence.
+- [x] **0.2** — Synchronisation incrémentale. Cache TMDB persistant (stale-while-revalidate, TTL de 90 jours avec jitter) + curseur d'état d'historique Trakt. Synchro stable passant de minutes à quelques secondes. → [spec 0001](../specs/0001-incremental-sync.md)
+- [x] **0.3** — Écritures différentielles. Ne réécrit que les notes dont le frontmatter ou la section de corps gérée a réellement changé ; les couches de synchro inter-appareils cessent de brasser 1200 fichiers par synchro. 0.3.x a aussi ajouté : bouton Test pour la clé TMDB + bannière d'alerte quand la langue de métadonnées est définie sans clé, et désambiguïsation à deux niveaux des noms de fichiers pour les collisions de titres localisés (par ex. 5 séries toutes nommées « 重生 » ne se battent plus pour le même nom de fichier). → [spec 0002](../specs/0002-diff-based-write.md)
+- [x] **0.4** — Préparation à la soumission au répertoire. Id de plugin renommé `obsidian-sync-trakt` → `sync-trakt` (le bot du répertoire Obsidian rejette les ids contenant « obsidian »), `minAppVersion` resserré à 1.6.6, et migration automatique transparente des données depuis l'ancien dossier au premier lancement. → [spec 0004](../specs/0004-obsidian-directory-submission.md)
+- [x] **0.5** — Paramètres locaux à l'appareil + nettoyage automatique. Interrupteur cloud par paramètre pour que chaque paramètre puisse se désinscrire de la synchro inter-appareils ; nettoyage automatique des fichiers binaires de l'ancien dossier (en gardant data.json comme filet de sécurité) pour que les utilisateurs ne voient pas deux entrées de plugin en double dans leurs paramètres. → [spec 0003](../specs/0003-device-local-settings.md)
+- [x] **0.6** — Interface des paramètres en onglets + 11 langues de modèles de notes intégrées. Page des paramètres réorganisée en 4 onglets (Général / Notes / Synchro / Daily Notes). Modèles de notes passés de 3 à 11 langues faites main (+ ja, ko, fr, de, it, es, pt-BR, ru). Liste déroulante de langue de modèle filtrée pour ne montrer que les langues intégrées. → [spec 0005](../specs/0005-settings-ui-tabs.md) + [spec 0007](../specs/0007-template-language-expansion.md)
+- [x] **0.7** — Intégration Daily Notes. Insère automatiquement une ligne par événement (vu / watchlist / favori / noté) dans votre Daily Note à chaque synchronisation, triées chronologiquement, dans la langue de modèle choisie. Sécurité en ajout seul pour les jours passés ; le jour actuel est réécrit au fil de la journée. Bouton de backfill manuel couvrant jusqu'à 30 jours passés. → [spec 0006](../specs/0006-daily-notes-integration.md)
+- [ ] **En cours** — Référencement au [répertoire officiel des Community Plugins d'Obsidian](https://obsidian.md/plugins). [PR #12757](https://github.com/obsidianmd/obsidian-releases/pull/12757) actuellement en revue.
+- [ ] **À venir** — Plus de traductions d'interface (actuellement en + zh-CN) à la demande ; langues de modèles intégrées supplémentaires sur demande.
 
 ## 🤝 Remerciements
 

@@ -14,9 +14,13 @@
 ## ✨ Why?
 
 - **Detailed watch history** — exactly which episode you watched at what time, including re-watches, kept in sync as you keep watching
-- **Metadata in 15+ languages** — translate titles / overviews / taglines / genres via TMDB. Built-in presets for Chinese (CN / TW / HK), Japanese, Korean, French, German, Spanish (ES / MX), Portuguese (BR), Italian, Russian — plus a custom mode that accepts any TMDB-supported BCP-47 locale code. English originals are always preserved alongside in `*_original_*` frontmatter fields
+- **Metadata in 15+ languages** — translate titles / overviews / taglines / genres via TMDB. Built-in presets for Chinese (CN / TW / HK), Japanese, Korean, French, German, Spanish (ES / MX), Portuguese (BR), Italian, Russian — plus a custom mode for any TMDB-supported locale. English originals always preserved in `*_original_*` frontmatter fields
+- **Note templates in 11 languages** _(0.6.0)_ — hand-curated bundled templates (en + zh-CN + zh-TW + ja + ko + fr + de + it + es + pt-BR + ru). Pick from the new template-language dropdown; switch any time without losing customizations
+- **Tabbed settings UI** _(0.6.0)_ — General / Notes / Sync / Daily Notes. Last-viewed tab remembered per device
+- **Daily Notes integration** _(0.7.0)_ — auto-injects per-event lines into your Daily Note on every sync (watched / watchlist-added / favorited / rated), chronologically sorted, in your chosen template language. Marker-bounded region is fully isolated — content outside it is never modified. See [spec 0006](docs/specs/0006-daily-notes-integration.md)
 - **Fast incremental sync** _(0.2.0)_ — first sync seeds the local TMDB cache + Trakt history state; subsequent syncs only fetch what changed. Steady-state sync time drops from minutes to single-digit seconds. See [spec 0001](docs/specs/0001-incremental-sync.md)
 - **Quiet writes** _(0.3.0)_ — sync only rewrites notes whose content actually changed. After watching one new episode, a 1200-item library writes one note instead of all 1200 — your cross-device sync layer (Obsidian Sync / iCloud / Syncthing) stops re-uploading the entire library every run. See [spec 0002](docs/specs/0002-diff-based-write.md)
+- **Per-setting cloud toggle** _(0.5.0)_ — pick which settings sync across devices and which stay local. Auto-sync interval, startup-sync toggle, UI language — each can be device-local so your Mac and iPhone don't fight over them. See [spec 0003](docs/specs/0003-device-local-settings.md)
 
 ## 🎬 Detailed watch history
 
@@ -58,13 +62,34 @@ Tags and tag-note paths always stay in English — your existing Dataview querie
 
 ## 🌍 Plugin UI + note templates
 
-Metadata localization above covers many languages; the plugin's own UI surface is a separate, smaller story. **Settings tab, command palette, and notice popups** currently speak **English** and **简体中文**. **Bundled note templates** ship in English, Simplified Chinese (`zh-CN`), and Traditional Chinese (`zh-TW` / `zh-HK`); other template-language codes fall back to the English template — edit the template manually for now, or [open an issue](https://github.com/o1xhack/obsidian-sync-trakt/issues) to request a bundled translation. More UI languages on demand.
+Metadata localization above is one axis; the plugin's own surfaces are separate axes:
+
+- **Settings tab, command palette, notice popups** speak **English** and **简体中文**. More UI languages on demand — [open an issue](https://github.com/o1xhack/obsidian-sync-trakt/issues) if you want to volunteer one.
+- **Bundled note templates** _(0.6.0 expanded from 3 → 11)_ — English, Simplified Chinese (zh-CN), Traditional Chinese (zh-TW / zh-HK), Japanese, Korean, French, German, Italian, Spanish, Portuguese (BR), Russian. Hand-curated, not machine-translated; section headings, bullet labels, and punctuation follow each language's conventions (full-width colons in Japanese, spaced colons in French, etc.). The template-language dropdown lists exactly these 11; locales outside the list are no longer offered (they previously fell back silently to English, which was confusing).
 
 <!-- screenshot: bilingual-ui -->
 
+## 📅 Daily Notes integration _(0.7.0)_
+
+Auto-inserts per-event lines into your Daily Note for every sync — chronologically sorted, in your chosen template language. Covers watched episodes, watchlist additions, favorites, and ratings:
+
+```markdown
+%% trakt:daily:start %%
+10:00 — 看了 低智商犯罪 (2026) S1E16, S1E17
+14:30 — 加入想看 黑暗骑士 (2008)
+21:30 — 打分 9/10 重生 (2020)
+%% trakt:daily:end %%
+```
+
+Each event type is gated by its corresponding sync source toggle — if `Sync favorites` is off, favorite events won't appear in Daily Notes either. Verbs (`watched` / `看了` / `視聴` / `시청` / `a regardé`…) follow your **template language** setting across all 11 bundled languages.
+
+**Safety contract**: the marker region is fully isolated — content outside it is **never modified**. Past days are add-only (existing markers preserved); today is overwritten so newer events appear on later syncs. Configure folder + filename format (Moment.js syntax like `YYYY-MM-DD` or `YYYY/YYYY.MM.DD`) in **Settings → Daily Notes**. A manual **Backfill** button covers up to 30 past days. See [spec 0006](docs/specs/0006-daily-notes-integration.md).
+
 ## 🔄 Cross-device sync
 
-Auth state — Trakt tokens, TMDB key, all settings — lives in `<vault>/.obsidian/plugins/obsidian-sync-trakt/data.json` and follows your vault-sync layer. Configure auth once on Mac, share with iPhone via Obsidian Sync (with `Plugin data` enabled), Syncthing, iCloud + Advanced Data Protection, or Cryptomator. The plugin doesn't store anything on a server.
+Auth state — Trakt tokens, TMDB key, all settings — lives in `<vault>/.obsidian/plugins/sync-trakt/data.json` and follows your vault-sync layer. Configure auth once on Mac, share with iPhone via Obsidian Sync (with `Plugin data` enabled), Syncthing, iCloud + Advanced Data Protection, or Cryptomator. The plugin doesn't store anything on a server.
+
+Since 0.5.0, **any individual setting can opt out of cross-device sync** via a small cloud icon next to it (currently exposed for `Sync on startup` / `Auto-sync` / `Auto-sync interval` / `Plugin UI language`). Useful when, e.g., you want auto-sync every 30 min on Mac but never on iPhone.
 
 ## 📊 View your library in Obsidian Bases
 
@@ -144,7 +169,7 @@ npm run lint
 npm run test:i18n  # smoke tests
 ```
 
-Then copy `main.js`, `manifest.json`, `styles.css` to `<vault>/.obsidian/plugins/obsidian-sync-trakt/`.
+Then copy `main.js`, `manifest.json`, `styles.css` to `<vault>/.obsidian/plugins/sync-trakt/`.
 
 </details>
 
@@ -159,15 +184,17 @@ Then copy `main.js`, `manifest.json`, `styles.css` to `<vault>/.obsidian/plugins
 
 ## 🗺️ Roadmap
 
-- [x] Detailed per-episode watch-history sync
-- [x] Metadata localization across 15+ language presets + any TMDB-supported locale via custom mode
-- [x] Bilingual plugin UI (en + zh-CN); more on demand
-- [x] Translated default note templates (en + zh-CN + zh-TW)
-- [x] TMDB metadata cache (0.2.0) — skip re-fetching on language switch + steady-state sync in seconds
-- [x] Incremental Trakt history fetch (0.2.0) — only fetch new watch events since last sync
-- [x] Diff-based writes (0.3.0) — only rewrite notes that actually changed, no more cross-device sync storm
-- [ ] Submit to Obsidian Community Plugins directory
-- [ ] More plugin-UI translations (ja / ko / fr / ...) on demand
+Major versions since the fork (chronological):
+
+- [x] **0.1** — Initial fork. Detailed watch history with per-episode timestamps, metadata localization via TMDB + Trakt fallback chain, bilingual UI (en + zh-CN), translated note templates (en + zh-CN + zh-TW), distinct plugin id from upstream so both can coexist.
+- [x] **0.2** — Incremental sync. Persistent TMDB cache (stale-while-revalidate, 90-day TTL with jitter) + Trakt history-state cursor. Steady-state sync drops from minutes to single-digit seconds. → [spec 0001](docs/specs/0001-incremental-sync.md)
+- [x] **0.3** — Diff-based writes. Only rewrite notes whose frontmatter or managed body section actually changed; cross-device sync layers stop shuffling 1200 files per sync. 0.3.x also added: TMDB API key Test button + warning banner when metadata language is set without a key, and two-tier filename disambiguation for localized-title collisions (e.g. 5 shows all called "重生" no longer fight for the same filename). → [spec 0002](docs/specs/0002-diff-based-write.md)
+- [x] **0.4** — Directory submission preparation. Plugin id renamed `obsidian-sync-trakt` → `sync-trakt` (Obsidian directory bot rejects ids containing "obsidian"), `minAppVersion` tightened to 1.6.6, and transparent automatic data migration from the legacy folder on first launch. → [spec 0004](docs/specs/0004-obsidian-directory-submission.md)
+- [x] **0.5** — Device-local settings + automatic cleanup. Per-setting cloud-icon toggle so each setting can opt out of cross-device sync; auto-cleanup of the legacy folder's binary files (keeping data.json as a safety net) so users don't see two duplicate plugin entries in their settings. → [spec 0003](docs/specs/0003-device-local-settings.md)
+- [x] **0.6** — Tabbed settings UI + 11 bundled note template languages. Settings page reorganized into 4 tabs (General / Notes / Sync / Daily Notes). Note templates expanded from 3 to 11 hand-curated languages (+ ja, ko, fr, de, it, es, pt-BR, ru). Template-language dropdown filtered to only show bundled languages. → [spec 0005](docs/specs/0005-settings-ui-tabs.md) + [spec 0007](docs/specs/0007-template-language-expansion.md)
+- [x] **0.7** — Daily Notes integration. Auto-inserts per-event lines (watched / watchlist / favorited / rated) into your Daily Note for every sync, chronologically sorted, in your chosen template language. Add-only safety for past days; today is overwritten as the day progresses. Manual backfill button covers up to 30 past days. → [spec 0006](docs/specs/0006-daily-notes-integration.md)
+- [ ] **Pending** — Listing in the official [Obsidian Community Plugins directory](https://obsidian.md/plugins). [PR #12757](https://github.com/obsidianmd/obsidian-releases/pull/12757) currently in review.
+- [ ] **Future** — More plugin UI translations (currently en + zh-CN) on demand; additional bundled template languages on request.
 
 ## 🤝 Acknowledgements
 
