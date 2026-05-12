@@ -1343,6 +1343,12 @@ export class TraktrSettingTab extends PluginSettingTab {
     }
 
     if (this.activeTab === "general") {
+    // [0.7.4] Version row at the top — read from manifest at render
+    // time so we never have to remember to bump it here on release.
+    new Setting(containerEl)
+      .setName(t("plugin.version.name"))
+      .setDesc(this.plugin.manifest.version);
+
     // ── Authentication ──
     new Setting(containerEl).setName(t("auth.heading")).setHeading();
 

@@ -134,6 +134,11 @@ const STRINGS = {
     "zh-CN": "同步到 Daily Notes（仅今天）",
   },
 
+  // [0.7.4] Static version row at the top of the General tab — name
+  // is i18n'd, value comes from this.plugin.manifest.version at render
+  // time so it never needs manual maintenance across releases.
+  "plugin.version.name": { en: "Version", "zh-CN": "版本" },
+
   // ── Authentication section ──
   "auth.heading": { en: "Authentication", "zh-CN": "认证" },
   "auth.clientId.name": {
