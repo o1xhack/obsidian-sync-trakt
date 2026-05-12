@@ -55,7 +55,7 @@ horizontal tabs. We adopt the same pattern.
 
 | Tab id | Label (en) | Label (zh-CN) | Contents |
 |---|---|---|---|
-| `api` | API | API | Trakt auth + Auth sync notice + TMDB key + Test button + Poster size + TMDB cache (TTL + clear) + Reset all |
+| `general` | General | 通用 | Trakt auth + Auth sync notice + TMDB key + Test button + Poster size + TMDB cache (TTL + clear) + Reset all |
 | `notes` | Notes | 笔记 | Metadata language + Custom code + UI language (cloud icon) + Template language + Folder + Filename template + Property prefix + Movie template + Show template + Tags + Tag notes |
 | `sync` | Sync | 同步 | Sync watchlist / watched / watched detail / favorites / ratings + Sync movies / shows + Sync on startup (cloud icon) + Auto-sync (cloud icon) + Auto-sync interval (cloud icon) + Overwrite existing body + Delete removed items + History full-refresh interval + Clear history state |
 | `daily` | Daily Notes | 日记 | _Empty in 0.6.0_ — to be populated by spec 0006 in 0.7.0. Tab is visible but renders only a one-line placeholder: "Daily Notes integration coming in 0.7.0." |
@@ -68,8 +68,8 @@ UX (one informational line).
 
 ```typescript
 localStorage key: "sync-trakt:_activeSettingsTab"
-value: "api" | "notes" | "sync" | "daily"
-default: "api"
+value: "general" | "notes" | "sync" | "daily"
+default: "general"
 ```
 
 Stored device-local (via `app.saveLocalStorage`) — the choice of which
@@ -83,7 +83,7 @@ Refactor `TraktrSettingTab.display()` into per-tab renderers:
 
 ```typescript
 class TraktrSettingTab extends PluginSettingTab {
-  private activeTab: SettingsTabId = "api";
+  private activeTab: SettingsTabId = "general";
 
   display(): void {
     const { containerEl } = this;
@@ -92,7 +92,7 @@ class TraktrSettingTab extends PluginSettingTab {
     this.renderTabBar(containerEl);
     const content = containerEl.createDiv({ cls: "trakt-tab-content" });
     switch (this.activeTab) {
-      case "api":    this.renderApiTab(content); break;
+      case "general":    this.renderGeneralTab(content); break;
       case "notes":  this.renderNotesTab(content); break;
       case "sync":   this.renderSyncTab(content); break;
       case "daily":  this.renderDailyTab(content); break;
@@ -114,7 +114,7 @@ class TraktrSettingTab extends PluginSettingTab {
     }
   }
 
-  private renderApiTab(c: HTMLElement): void {
+  private renderGeneralTab(c: HTMLElement): void {
     // existing Authentication section + TMDB section + Reset
   }
   // ... etc
@@ -164,8 +164,8 @@ untouched.
 
 | # | Scenario | Behavior |
 |---|---|---|
-| 1 | `localStorage` missing `_activeSettingsTab` | Default `"api"` |
-| 2 | `localStorage` has unknown tab id (e.g. dropped tab from future version) | Fallback `"api"` |
+| 1 | `localStorage` missing `_activeSettingsTab` | Default `"general"` |
+| 2 | `localStorage` has unknown tab id (e.g. dropped tab from future version) | Fallback `"general"` |
 | 3 | User on mobile / narrow screen | Tabs wrap to next line via `flex-wrap: wrap` |
 | 4 | User changes a setting on one tab, switches tabs | Setting was saved synchronously on change; tab switch re-renders from current settings. No cross-tab pollution |
 | 5 | Refresh / re-open settings | Opens to last-selected tab from `localStorage` |
@@ -189,7 +189,7 @@ surface:
 ## Migration
 
 None. No state schema change. The `_activeSettingsTab` localStorage
-key is created on first 0.6.0 launch with default `"api"`. Users see
+key is created on first 0.6.0 launch with default `"general"`. Users see
 the new tabbed UI but every setting they've already configured is
 still there (in the same group as before, just under a different tab
 header).
@@ -199,7 +199,7 @@ header).
 | File | Change |
 |---|---|
 | `src/settings.ts` | Refactor `display()` into 4 per-tab render methods; add `renderTabBar`; add `activeTab` state + load/save helpers |
-| `src/i18n.ts` | 4 new keys: `tabs.api`, `tabs.notes`, `tabs.sync`, `tabs.daily` (en + zh-CN) |
+| `src/i18n.ts` | 4 new keys: `tabs.general`, `tabs.notes`, `tabs.sync`, `tabs.daily` (en + zh-CN) |
 | `styles.css` | `.trakt-tab-bar`, `.trakt-tab`, `.trakt-tab.is-active` styles |
 | `tests/i18n.smoke.ts` | 1 new case verifying the 4 tab keys resolve in both languages |
 | `docs/CHANGELOG.md` | 0.6.0 entry |
