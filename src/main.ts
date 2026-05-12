@@ -96,15 +96,22 @@ export default class TraktrPlugin extends Plugin {
             getMergedItems: () => this.lastMergedItems,
           };
           const result = await processCatchUp(host);
-          const t = getTranslator(this.settings.uiLanguage);
-          new Notice(
-            t("daily.catchUpDone", {
-              todayMode: result.todayMode,
-              pastWrote: result.pastWrote,
-              pastSkipped: result.pastSkipped,
-            }),
-            6000,
-          );
+          // [0.7.3] Pick the right variant based on what actually
+          // happened — and suppress the notice entirely when nothing
+          // user-visible changed. Old code printed the raw enum value
+          // ("today wrote_new") which was both a bug and noise.
+          const todayUpdated =
+            result.todayMode === "wrote_new" ||
+            result.todayMode === "overwrote";
+          if (todayUpdated || result.pastWrote > 0) {
+            const t = getTranslator(this.settings.uiLanguage);
+            const key = todayUpdated
+              ? result.pastWrote > 0
+                ? "daily.catchUpDone.withPast"
+                : "daily.catchUpDone.todayOnly"
+              : "daily.catchUpDone.pastOnly";
+            new Notice(t(key, { wrote: result.pastWrote }), 5000);
+          }
         }
       },
     );
@@ -211,7 +218,7 @@ export default class TraktrPlugin extends Plugin {
       callback: async () => {
         const tNow = getTranslator(this.settings.uiLanguage);
         if (!this.settings.dailyNotesEnabled) {
-          new Notice("Daily notes integration is disabled.");
+          new Notice(tNow("daily.disabled"));
           return;
         }
         const today = localTodayISODate();
@@ -222,14 +229,11 @@ export default class TraktrPlugin extends Plugin {
           getMergedItems: () => this.lastMergedItems,
         };
         const result = await processDate(host, today, "today");
-        new Notice(
-          tNow("daily.catchUpDone", {
-            todayMode: result.status,
-            pastWrote: 0,
-            pastSkipped: 0,
-          }),
-          6000,
-        );
+        const key =
+          result.status === "wrote_new" || result.status === "overwrote"
+            ? "daily.today.updated"
+            : "daily.today.noFile";
+        new Notice(tNow(key), 5000);
       },
     });
 

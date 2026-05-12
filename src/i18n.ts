@@ -92,18 +92,42 @@ const STRINGS = {
     "zh-CN": "回溯最近 {days} 天",
   },
   "daily.backfill.modal.body": {
-    en: "This will check each day from {days} days ago through today. For each day:\n\n• Daily Note doesn't exist → skip\n• Daily Note already has our marker region → skip (your previous Trakt data stays as-is)\n• Daily Note exists without markers → append a fresh marker region with that day's events to the END of the file\n\nYour existing Daily Note content outside our marker region is NEVER modified.",
-    "zh-CN": "将检查从 {days} 天前到今天的每一天。每个日期：\n\n• Daily Note 不存在 → 跳过\n• 已有我们的 marker 区间 → 跳过（之前的 Trakt 数据保持不变）\n• Daily Note 存在但没有 marker → 在文件**末尾**追加 marker 区间和当天事件\n\nmarker 区间之外的内容**永远不会**被修改。",
+    en: "Each day from {days} days ago through today:\n\n• No Daily Note → skip\n• Empty marker region (e.g. from your template) → fill it\n• Marker region already has Trakt content → skip (kept as-is)\n• No markers → append a fresh marker region at the END of the file\n\nContent outside our marker region is NEVER modified.",
+    "zh-CN": "从 {days} 天前到今天的每一天：\n\n• 没有 Daily Note → 跳过\n• 空的 marker 区间（例如来自模板） → 填入当天事件\n• marker 区间已有 Trakt 内容 → 跳过（保持原样）\n• 没有 marker → 在文件**末尾**追加 marker 区间和当天事件\n\nmarker 区间之外的内容**永远不会**被修改。",
   },
   "daily.backfill.modal.confirm": { en: "Backfill", "zh-CN": "开始回溯" },
   "daily.backfill.modal.cancel": { en: "Cancel", "zh-CN": "取消" },
   "daily.backfill.done": {
-    en: "Backfilled {wrote} day(s); skipped {skipped} (missing file or already had markers).",
-    "zh-CN": "已回溯 {wrote} 天；跳过 {skipped} 天（文件缺失或已有 marker）。",
+    en: "Sync Trakt: backfilled {wrote} day(s), skipped {skipped}.",
+    "zh-CN": "Sync Trakt：已回溯 {wrote} 天，跳过 {skipped} 天。",
   },
-  "daily.catchUpDone": {
-    en: "Daily Notes: today {todayMode}; {pastWrote} past day(s) filled, {pastSkipped} skipped.",
-    "zh-CN": "Daily Notes：今天 {todayMode}；过去 {pastWrote} 天已填入、{pastSkipped} 天跳过。",
+  // [0.7.3] Catch-up notice variants — picked in main.ts based on result.
+  // Old single-key version exposed the raw {todayMode} enum to the user
+  // ("today wrote_new"), which was a bug. Split into purpose-built keys.
+  "daily.catchUpDone.todayOnly": {
+    en: "Sync Trakt: Daily Note updated.",
+    "zh-CN": "Sync Trakt：Daily Note 已更新。",
+  },
+  "daily.catchUpDone.withPast": {
+    en: "Sync Trakt: Daily Note updated, {wrote} past day(s) filled.",
+    "zh-CN": "Sync Trakt：Daily Note 已更新，过去 {wrote} 天新填入。",
+  },
+  "daily.catchUpDone.pastOnly": {
+    en: "Sync Trakt: {wrote} past day(s) filled in Daily Notes.",
+    "zh-CN": "Sync Trakt：过去 {wrote} 天已填入 Daily Note。",
+  },
+  // [0.7.3] Result notices for the "sync today only" command.
+  "daily.today.updated": {
+    en: "Sync Trakt: today's Daily Note updated.",
+    "zh-CN": "Sync Trakt：今日 Daily Note 已更新。",
+  },
+  "daily.today.noFile": {
+    en: "Sync Trakt: no Daily Note for today.",
+    "zh-CN": "Sync Trakt：今天没有 Daily Note。",
+  },
+  "daily.disabled": {
+    en: "Sync Trakt: Daily Notes integration is disabled.",
+    "zh-CN": "Sync Trakt：Daily Notes 集成未开启。",
   },
   "cmd.syncDailyNotesToday": {
     en: "Sync to daily notes (today only)",
@@ -133,8 +157,8 @@ const STRINGS = {
     "zh-CN": "连接状态",
   },
   "auth.connection.connected": {
-    en: "Traktr connected.",
-    "zh-CN": "Traktr 已连接。",
+    en: "Connected to Trakt.",
+    "zh-CN": "已连接到 Trakt。",
   },
   "auth.connection.notConnected": {
     en: "Not connected.",
@@ -143,12 +167,12 @@ const STRINGS = {
   "auth.connection.disconnect": { en: "Disconnect", "zh-CN": "断开连接" },
   "auth.connection.connect": { en: "Connect", "zh-CN": "连接" },
   "auth.connection.disconnectedNotice": {
-    en: "Traktr disconnected.",
-    "zh-CN": "Traktr 已断开连接。",
+    en: "Sync Trakt: disconnected.",
+    "zh-CN": "Sync Trakt：已断开连接。",
   },
   "auth.connection.needCredentialsNotice": {
-    en: "Please enter your client ID and secret first.",
-    "zh-CN": "请先填写客户端 ID 和密钥。",
+    en: "Sync Trakt: fill in client ID and secret first.",
+    "zh-CN": "Sync Trakt：请先填写客户端 ID 和密钥。",
   },
   "auth.sync.name": {
     en: "Cross-device sync",
@@ -248,8 +272,8 @@ const STRINGS = {
     "zh-CN": "清空缓存",
   },
   "tmdb.cache.clear.notice": {
-    en: "TMDB cache cleared.",
-    "zh-CN": "TMDB 缓存已清空。",
+    en: "Sync Trakt: TMDB cache cleared.",
+    "zh-CN": "Sync Trakt：TMDB 缓存已清空。",
   },
 
   // ── Localization section ──
@@ -462,8 +486,8 @@ const STRINGS = {
     "zh-CN": "清空历史状态",
   },
   "history.state.clear.notice": {
-    en: "Watch history state cleared. Next sync will rebuild from Trakt.",
-    "zh-CN": "观看历史状态已清空。下次同步会从 Trakt 重新构建。",
+    en: "Sync Trakt: watch history cleared. Next sync will rebuild it.",
+    "zh-CN": "Sync Trakt：观看历史已清空。下次同步会重新构建。",
   },
   "syncSources.ratings.name": {
     en: "Sync ratings",
@@ -530,8 +554,8 @@ const STRINGS = {
     "zh-CN": "把所有设置恢复为默认值。认证凭据会被保留。",
   },
   "reset.notice": {
-    en: "Settings reset to defaults.",
-    "zh-CN": "设置已恢复默认。",
+    en: "Sync Trakt: settings reset to defaults.",
+    "zh-CN": "Sync Trakt：设置已恢复默认。",
   },
 
   // ── Commands ──
@@ -549,23 +573,22 @@ const STRINGS = {
 
   // ── Notices ──
   "notice.notConnected": {
-    en: "Traktr not connected. Use settings or the command palette to connect.",
-    "zh-CN":
-      "Traktr 未连接。请通过设置或命令面板连接。",
+    en: "Sync Trakt: not connected. Open settings to authenticate.",
+    "zh-CN": "Sync Trakt：未连接。请在设置中完成认证。",
   },
   "notice.needCredentials": {
-    en: "Please configure your client ID and secret in settings first.",
-    "zh-CN": "请先在设置中填写客户端 ID 和密钥。",
+    en: "Sync Trakt: fill in client ID and secret in settings first.",
+    "zh-CN": "Sync Trakt：请先在设置中填写客户端 ID 和密钥。",
   },
   "notice.alreadySyncing": {
-    en: "Sync already in progress.",
-    "zh-CN": "同步已经在进行中。",
+    en: "Sync Trakt: sync already running.",
+    "zh-CN": "Sync Trakt：同步正在进行中。",
   },
   // [0.4.0] Shown once on first launch of 0.4.0 if state was migrated
   // from the legacy `obsidian-sync-trakt` plugin folder.
   "notice.migratedFromLegacyFolder": {
-    en: "Traktr: settings migrated from the legacy plugin folder. Your Trakt token, TMDB cache, and history state are preserved.",
-    "zh-CN": "Traktr：已从旧插件目录迁移设置。Trakt token、TMDB 缓存和历史状态都已保留。",
+    en: "Sync Trakt: settings migrated from the legacy plugin folder. Your Trakt token, TMDB cache, and history state are preserved.",
+    "zh-CN": "Sync Trakt：已从旧插件目录迁移设置。Trakt token、TMDB 缓存和历史状态都已保留。",
   },
 
   // [0.5.0] Cloud icon tooltips for the per-setting sync toggle. See spec 0003.
@@ -578,16 +601,16 @@ const STRINGS = {
     "zh-CN": "此设置仅在本设备生效。点击改为跨设备同步。",
   },
   "notice.syncComplete": {
-    en: "Sync complete: {added} added, {updated} updated, {unchanged} unchanged, {removed} removed",
-    "zh-CN": "同步完成：新增 {added}，更新 {updated}，未变 {unchanged}，移除 {removed}",
+    en: "Sync Trakt: {added} new, {updated} updated, {unchanged} unchanged, {removed} removed.",
+    "zh-CN": "Sync Trakt：新增 {added}，更新 {updated}，未变 {unchanged}，移除 {removed}。",
   },
   "notice.syncCompleteWithFailures": {
-    en: ", {failed} failed",
-    "zh-CN": "，失败 {failed}",
+    en: " {failed} failed.",
+    "zh-CN": " 失败 {failed}。",
   },
   "notice.syncFailed": {
-    en: "Traktr sync failed: {msg}",
-    "zh-CN": "Traktr 同步失败：{msg}",
+    en: "Sync Trakt: sync failed — {msg}",
+    "zh-CN": "Sync Trakt：同步失败 — {msg}",
   },
   "notice.syncMore": {
     en: " (+{count} more — see console)",
@@ -596,7 +619,10 @@ const STRINGS = {
 
   // ── Status bar ──
   "status.syncing": { en: "⟳ Syncing…", "zh-CN": "⟳ 同步中…" },
-  "status.prefix": { en: "Traktr: ", "zh-CN": "Traktr：" },
+  // [0.7.3] Prefix used by the in-progress sync Notice (re-rendered per
+  // progress tick) and by the per-error follow-up notice. Notice strings
+  // for one-shot Notices bake the prefix in directly instead.
+  "status.prefix": { en: "Sync Trakt: ", "zh-CN": "Sync Trakt：" },
 
   // ── Progress messages (status bar during sync) ──
   "progress.fetchingTrakt": {
@@ -636,8 +662,8 @@ const STRINGS = {
   },
   "authModal.copyHint": { en: "Click to copy", "zh-CN": "点击复制" },
   "authModal.codeCopied": {
-    en: "Code copied to clipboard!",
-    "zh-CN": "代码已复制到剪贴板！",
+    en: "Sync Trakt: pairing code copied.",
+    "zh-CN": "Sync Trakt：配对码已复制。",
   },
   "authModal.codeExpiresIn": {
     en: "Code expires in {n}s",
@@ -649,8 +675,8 @@ const STRINGS = {
   },
   "authModal.cancel": { en: "Cancel", "zh-CN": "取消" },
   "authModal.success": {
-    en: "Successfully connected!",
-    "zh-CN": "已成功连接！",
+    en: "Sync Trakt: connected to Trakt.",
+    "zh-CN": "Sync Trakt：已连接到 Trakt。",
   },
   "authModal.errorPrefix": { en: "Error: {msg}", "zh-CN": "错误：{msg}" },
   "authModal.failedStart": {

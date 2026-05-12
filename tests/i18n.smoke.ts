@@ -391,13 +391,13 @@ console.log("\n[8] UI translator returns correct language");
   const tZh = getTranslator("zh-CN");
   assertEq(
     tZh("notice.syncComplete", { added: 5, updated: 3, unchanged: 12, removed: 1 }),
-    "同步完成：新增 5，更新 3，未变 12，移除 1",
+    "Sync Trakt：新增 5，更新 3，未变 12，移除 1。",
     "interpolated zh-CN notice with vars",
   );
   const tEn = getTranslator("en");
   assertEq(
     tEn("notice.syncComplete", { added: 5, updated: 3, unchanged: 12, removed: 1 }),
-    "Sync complete: 5 added, 3 updated, 12 unchanged, 1 removed",
+    "Sync Trakt: 5 new, 3 updated, 12 unchanged, 1 removed.",
     "interpolated en notice with vars",
   );
 }
@@ -1985,12 +1985,12 @@ void (async () => {
       "zh-CN: key resolved",
     );
     assertTrue(
-      enMsg.toLowerCase().includes("traktr"),
-      "en notice mentions Traktr so users know which plugin spoke",
+      enMsg.toLowerCase().includes("sync trakt"),
+      "en notice mentions Sync Trakt so users know which plugin spoke",
     );
     assertTrue(
-      zhMsg.includes("Traktr") || zhMsg.includes("迁移"),
-      "zh-CN notice mentions Traktr / migration so users know what happened",
+      zhMsg.includes("Sync Trakt") || zhMsg.includes("迁移"),
+      "zh-CN notice mentions Sync Trakt / migration so users know what happened",
     );
     assertTrue(
       enMsg !== zhMsg,
@@ -2551,6 +2551,51 @@ void (async () => {
       renderVerb("watched", "ja-JP"),
       "upper-case locale resolves same as lower-case (case-insensitive)",
     );
+  }
+
+  // ── Test 56b: [0.7.3] all Notice strings carry "Sync Trakt:" prefix ──
+  // Locks in the unified-prefix invariant. Each Notice the user sees as a
+  // popup must identify the plugin — without it, the user can't tell which
+  // plugin spoke (Obsidian doesn't badge the Notice with the plugin name).
+  // Skip a few entries that are intentionally not popup Notices (inline
+  // status labels, embedded error reasons, translated suffixes).
+
+  console.log("\n[56b] every popup Notice string starts with 'Sync Trakt:'");
+  {
+    const noticeKeys = [
+      "notice.notConnected",
+      "notice.needCredentials",
+      "notice.alreadySyncing",
+      "notice.migratedFromLegacyFolder",
+      "notice.syncComplete",
+      "notice.syncFailed",
+      "auth.connection.disconnectedNotice",
+      "auth.connection.needCredentialsNotice",
+      "authModal.codeCopied",
+      "authModal.success",
+      "tmdb.cache.clear.notice",
+      "history.state.clear.notice",
+      "reset.notice",
+      "daily.backfill.done",
+      "daily.catchUpDone.todayOnly",
+      "daily.catchUpDone.withPast",
+      "daily.catchUpDone.pastOnly",
+      "daily.today.updated",
+      "daily.today.noFile",
+      "daily.disabled",
+    ] as const;
+    for (const k of noticeKeys) {
+      const enMsg = t(k, "en");
+      const zhMsg = t(k, "zh-CN");
+      assertTrue(
+        enMsg.startsWith("Sync Trakt:"),
+        `en '${k}' starts with 'Sync Trakt:' (got: ${enMsg.slice(0, 30)}…)`,
+      );
+      assertTrue(
+        zhMsg.startsWith("Sync Trakt"),
+        `zh-CN '${k}' starts with 'Sync Trakt' (got: ${zhMsg.slice(0, 30)}…)`,
+      );
+    }
   }
 
   // ── Test 56: [0.7.2] empty marker pair detection ────────────────────
