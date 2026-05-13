@@ -35,6 +35,7 @@ import {
   tmdbCacheStats,
   fetchMovieMetadata,
   verifyTmdbApiKey,
+  type TmdbMovieResponse,
 } from "../src/tmdb-api";
 import {
   mergeHistoryEvents,
@@ -2827,6 +2828,203 @@ void (async () => {
         "content after marker region preserved verbatim",
       );
     }
+  }
+
+  // ── Test 58: [0.9.0 / spec 0008] strict primary + fallback ───────────
+  // The previous test [5] covers the legacy loose-match path. This block
+  // locks in the new strict semantics: setting a fallback language flips
+  // pickTraktTranslation into strict-on-both mode, where zh-CN must be
+  // exactly zh-CN (zh-TW won't substitute) and unfindable entries
+  // advance through the fallback chain to English original (= null).
+
+  console.log("\n[58] pickTraktTranslation — strict primary + fallback");
+  {
+    const translations: TraktTranslation[] = [
+      { language: "zh", country: "tw", title: "黑暗騎士", overview: "" },
+      { language: "zh", country: "cn", title: "黑暗骑士", overview: "..." },
+      { language: "en", country: "us", title: "The Dark Knight", overview: "..." },
+      { language: "ja", country: "jp", title: "ダークナイト", overview: "..." },
+    ];
+
+    // Strict zh-CN with en fallback — both available, primary wins
+    assertEq(
+      pickTraktTranslation(translations, "zh-CN", "en")?.title,
+      "黑暗骑士",
+      "strict zh-CN matches exactly when present",
+    );
+
+    // Strict zh-CN, no zh-CN entry — falls back to en (NOT zh-TW)
+    const onlyTwAndEn: TraktTranslation[] = [
+      { language: "zh", country: "tw", title: "黑暗騎士", overview: "" },
+      { language: "en", country: "us", title: "The Dark Knight", overview: "..." },
+    ];
+    assertEq(
+      pickTraktTranslation(onlyTwAndEn, "zh-CN", "en")?.title,
+      "The Dark Knight",
+      "strict zh-CN misses → falls back to en (does NOT substitute zh-TW)",
+    );
+
+    // Strict zh-CN with en fallback, neither present — returns null
+    const onlyJa: TraktTranslation[] = [
+      { language: "ja", country: "jp", title: "ダークナイト", overview: "..." },
+    ];
+    assertEq(
+      pickTraktTranslation(onlyJa, "zh-CN", "en"),
+      null,
+      "both primary and fallback miss → null (caller keeps English original)",
+    );
+
+    // Strict primary same as fallback — degenerate but safe (no double-walk)
+    assertEq(
+      pickTraktTranslation(translations, "en", "en")?.title,
+      "The Dark Knight",
+      "primary=fallback=en still resolves",
+    );
+
+    // Backward compat: no fallback param → loose match preserved
+    assertEq(
+      pickTraktTranslation(onlyTwAndEn, "zh-CN")?.title,
+      "黑暗騎士",
+      "without fallback param: loose match (zh-CN finds zh-TW) — pre-0.9.0 behaviour",
+    );
+
+    // Language-only primary code (no country part) — strict still works
+    assertEq(
+      pickTraktTranslation(translations, "ja", "en")?.title,
+      "ダークナイト",
+      "strict language-only code matches any country tagged that language",
+    );
+
+    // Strict mode handles empty translations array gracefully
+    assertEq(
+      pickTraktTranslation([], "zh-CN", "en"),
+      null,
+      "empty input still returns null in strict mode",
+    );
+  }
+
+  // ── Test 59: [0.9.0 / spec 0008] tmdbCacheKey backward compat ────────
+  // Critical for upgraders: when fallback is "" (the default), cache keys
+  // must match the pre-0.9.0 format byte-for-byte so existing entries
+  // remain valid. When fallback is set, keys are scoped separately so the
+  // strict-mode picker's different output doesn't pollute loose-mode hits.
+
+  console.log("\n[59] tmdbCacheKey — fallback-aware key partitioning");
+  {
+    // Pre-0.9.0 callers used the 3-arg form; verify the default 4th arg
+    // produces the same string.
+    assertEq(
+      tmdbCacheKey("movie", 155, "zh-CN"),
+      "movie:155:zh-CN",
+      "no fallback → pre-0.9.0 key format preserved",
+    );
+    assertEq(
+      tmdbCacheKey("movie", 155, "zh-CN", ""),
+      "movie:155:zh-CN",
+      "explicit empty fallback → same key as omitted",
+    );
+    // Setting fallback yields a different namespace
+    assertEq(
+      tmdbCacheKey("movie", 155, "zh-CN", "en"),
+      "movie:155:zh-CN:fb=en",
+      "fallback set → distinct cache namespace",
+    );
+    // Different fallback values produce different keys (independence)
+    assertTrue(
+      tmdbCacheKey("movie", 155, "zh-CN", "en") !==
+        tmdbCacheKey("movie", 155, "zh-CN", "ja"),
+      "different fallbacks → different keys",
+    );
+    // Empty primary still works (localization disabled)
+    assertEq(
+      tmdbCacheKey("movie", 155, ""),
+      "movie:155:default",
+      "empty primary collapses to 'default' (pre-0.9.0)",
+    );
+  }
+
+  // ── Test 60: [0.9.0 / spec 0008] pickBestTranslation strict TMDB ─────
+  // Mirrors test 58 but for the TMDB path's translation array. Confirms
+  // the strict picker:
+  //   1. requires lang+country exact when the request has a country
+  //   2. falls back to fallbackLanguage on primary miss
+  //   3. returns null when both miss (caller keeps the original)
+
+  console.log("\n[60] pickBestTranslation — strict TMDB mode");
+  {
+    const data: TmdbMovieResponse = {
+      title: "The Dark Knight",
+      original_title: "The Dark Knight",
+      overview: "An English overview",
+      tagline: "Why so serious?",
+      genres: [{ id: 1, name: "Action" }, { id: 2, name: "Drama" }],
+      translations: {
+        translations: [
+          {
+            iso_639_1: "zh",
+            iso_3166_1: "TW",
+            data: { title: "黑暗騎士", overview: "繁體版簡介", tagline: "" },
+          },
+          {
+            iso_639_1: "zh",
+            iso_3166_1: "CN",
+            data: { title: "黑暗骑士", overview: "简体版简介", tagline: "" },
+          },
+          {
+            iso_639_1: "en",
+            iso_3166_1: "US",
+            data: { title: "The Dark Knight", overview: "An English overview", tagline: "Why so serious?" },
+          },
+        ],
+      },
+    };
+
+    // Strict zh-CN with en fallback — primary present
+    const cnStrict = pickBestTranslation(data, "zh-CN", "movie", "en");
+    assertEq(cnStrict?.title, "黑暗骑士", "TMDB strict zh-CN: exact match");
+    assertEq(cnStrict?.overview, "简体版简介", "TMDB strict zh-CN: overview from CN entry");
+    // Genres pass through from the top-level (TMDB returns them in the
+    // requested locale at the data root, not per-translation).
+    assertEq(cnStrict?.genres.length, 2, "TMDB strict: genres carry through");
+
+    // Strict zh-CN where ONLY zh-TW exists — falls back to en, NOT zh-TW
+    const dataNoCN: TmdbMovieResponse = {
+      ...data,
+      translations: {
+        translations: data.translations!.translations.filter(
+          (t) => !(t.iso_639_1 === "zh" && t.iso_3166_1 === "CN"),
+        ),
+      },
+    };
+    const fbResult = pickBestTranslation(dataNoCN, "zh-CN", "movie", "en");
+    assertEq(
+      fbResult?.title,
+      "The Dark Knight",
+      "TMDB strict zh-CN miss → en fallback (NOT zh-TW)",
+    );
+
+    // Both primary and fallback miss → null
+    const dataOnlyTw: TmdbMovieResponse = {
+      ...data,
+      translations: {
+        translations: data.translations!.translations.filter(
+          (t) => t.iso_639_1 === "zh" && t.iso_3166_1 === "TW",
+        ),
+      },
+    };
+    assertEq(
+      pickBestTranslation(dataOnlyTw, "zh-CN", "movie", "en"),
+      null,
+      "TMDB strict: both primary and fallback absent → null",
+    );
+
+    // Backward compat: no fallback param → loose match preserved (test [7]
+    // covers the loose case in depth; this just confirms we don't break it)
+    const cnLoose = pickBestTranslation(dataNoCN, "zh-CN", "movie");
+    assertTrue(
+      cnLoose?.title === "黑暗騎士" || cnLoose?.title === "The Dark Knight",
+      "TMDB loose mode: still picks a non-null variant (zh-TW via family fallback)",
+    );
   }
 
   console.log(`\n${"=".repeat(60)}`);

@@ -35,7 +35,7 @@ export interface TmdbMetadata {
   translation: TmdbTranslation | null;
 }
 
-interface TmdbTranslationEntry {
+export interface TmdbTranslationEntry {
   iso_639_1: string;
   iso_3166_1: string;
   data: {
@@ -46,7 +46,7 @@ interface TmdbTranslationEntry {
   };
 }
 
-interface TmdbMovieResponse {
+export interface TmdbMovieResponse {
   poster_path: string | null;
   original_title?: string;
   original_name?: string;
@@ -68,8 +68,18 @@ export function tmdbCacheKey(
   mediaType: "movie" | "tv",
   tmdbId: number,
   language: string,
+  fallback: string = "",
 ): string {
-  return `${mediaType}:${tmdbId}:${language || "default"}`;
+  const langPart = language || "default";
+  // [0.9.0] Fallback enables strict-match mode in pickBestTranslation, which
+  // produces a DIFFERENT filtered translation from the same raw data. Bake
+  // it into the cache key so toggling fallback on/off invalidates entries
+  // correctly. When fallback is "" (the default for upgraders), the key is
+  // byte-identical to pre-0.9.0 — existing cached entries stay valid.
+  if (fallback) {
+    return `${mediaType}:${tmdbId}:${langPart}:fb=${fallback}`;
+  }
+  return `${mediaType}:${tmdbId}:${langPart}`;
 }
 
 /**
@@ -187,6 +197,7 @@ export async function fetchMovieMetadata(
   language: string,
   cache: TmdbCache,
   ttlDays: number,
+  fallbackLanguage: string = "",
 ): Promise<TmdbMetadata> {
   return fetchTmdbMetadataCached(
     "movie",
@@ -196,6 +207,7 @@ export async function fetchMovieMetadata(
     language,
     cache,
     ttlDays,
+    fallbackLanguage,
   );
 }
 
@@ -206,6 +218,7 @@ export async function fetchTvMetadata(
   language: string,
   cache: TmdbCache,
   ttlDays: number,
+  fallbackLanguage: string = "",
 ): Promise<TmdbMetadata> {
   return fetchTmdbMetadataCached(
     "tv",
@@ -215,6 +228,7 @@ export async function fetchTvMetadata(
     language,
     cache,
     ttlDays,
+    fallbackLanguage,
   );
 }
 
@@ -226,8 +240,9 @@ async function fetchTmdbMetadataCached(
   language: string,
   cache: TmdbCache,
   ttlDays: number,
+  fallbackLanguage: string = "",
 ): Promise<TmdbMetadata> {
-  const key = tmdbCacheKey(mediaType, tmdbId, language);
+  const key = tmdbCacheKey(mediaType, tmdbId, language, fallbackLanguage);
   const entry = cache[key];
   const freshness = cacheEntryFreshness(entry);
 
@@ -253,6 +268,7 @@ async function fetchTmdbMetadataCached(
         cache,
         ttlDays,
         key,
+        fallbackLanguage,
       );
     }
     return { poster_url: entry.poster_url, translation: entry.translation };
@@ -265,6 +281,7 @@ async function fetchTmdbMetadataCached(
     apiKey,
     size,
     language,
+    fallbackLanguage,
   );
   // Only cache successful fetches. A response that's both empty AND has no
   // poster suggests TMDB returned an error or we got rate-limited; we'd
@@ -289,6 +306,7 @@ async function revalidateInBackground(
   cache: TmdbCache,
   ttlDays: number,
   key: string,
+  fallbackLanguage: string = "",
 ): Promise<void> {
   try {
     const fresh = await fetchTmdbMetadata(
@@ -297,6 +315,7 @@ async function revalidateInBackground(
       apiKey,
       size,
       language,
+      fallbackLanguage,
     );
     if (fresh.poster_url || fresh.translation || !language) {
       cache[key] = {
@@ -353,6 +372,7 @@ async function fetchTmdbMetadata(
   apiKey: string,
   size: PosterSize,
   language: string,
+  fallbackLanguage: string = "",
 ): Promise<TmdbMetadata> {
   try {
     const params = new URLSearchParams({ api_key: apiKey });
@@ -409,7 +429,12 @@ async function fetchTmdbMetadata(
       return { poster_url, translation: null };
     }
 
-    const translation = pickBestTranslation(data, language, mediaType);
+    const translation = pickBestTranslation(
+      data,
+      language,
+      mediaType,
+      fallbackLanguage,
+    );
     return { poster_url, translation };
   } catch (e) {
     console.warn(`TMDB lookup error for ${mediaType}/${tmdbId}:`, e);
@@ -421,11 +446,19 @@ async function fetchTmdbMetadata(
  * Walk the translations array client-side to find the best variant in the
  * user's language family. Workaround for TMDB's documented "title locked
  * blank for zh-CN" quirk — see spec 0001 §Context for details.
+ *
+ * [0.9.0] When `fallbackLanguage` is non-empty, switches to strict-match
+ * semantics (spec 0008): only an EXACT lang+country entry counts as the
+ * primary; if not present, try strict-match the fallback; if neither
+ * present, return null (caller keeps the English original). The pre-0.9.0
+ * loose-match behaviour (zh-CN finds zh-TW via family fallback) is
+ * preserved when `fallbackLanguage` is empty.
  */
 export function pickBestTranslation(
   data: TmdbMovieResponse,
   language: string,
   mediaType: "movie" | "tv",
+  fallbackLanguage: string = "",
 ): TmdbTranslation | null {
   const titleField = mediaType === "movie" ? data.title : data.name;
   const originalField =
@@ -437,6 +470,16 @@ export function pickBestTranslation(
   const mainGenres = (data.genres || [])
     .map((g) => (g.name || "").trim())
     .filter((n) => n.length > 0);
+
+  // [0.9.0] Strict mode — never substitute country variants.
+  if (fallbackLanguage) {
+    const all = data.translations?.translations || [];
+    return (
+      pickStrictTmdb(all, language, mediaType, mainGenres) ||
+      pickStrictTmdb(all, fallbackLanguage, mediaType, mainGenres) ||
+      null
+    );
+  }
 
   const mainLooksLocalized =
     mainTitle.length > 0 && mainTitle !== mainOriginal;
@@ -490,6 +533,53 @@ export function pickBestTranslation(
     tagline: candidateTagline,
     genres: mainGenres,
   };
+}
+
+/**
+ * [0.9.0] Strict-match a single language entry from the TMDB translations
+ * array. Unlike `orderCandidates` (which spreads to a whole country family),
+ * this returns the SINGLE entry that matches lang+country exactly — or any
+ * entry of that language when the request carries no country part. Returns
+ * null if no entry has usable title/overview/tagline content, so the caller
+ * can advance to the next fallback level.
+ *
+ * `mainGenres` is taken from the top-level `?language=` response (which is
+ * what TMDB returns in the user's requested locale, or the original
+ * language if that locale doesn't exist). Genres aren't part of the
+ * per-translation entry on TMDB, so they ride along with whichever
+ * translation we pick.
+ */
+function pickStrictTmdb(
+  all: ReadonlyArray<TmdbTranslationEntry>,
+  language: string,
+  mediaType: "movie" | "tv",
+  mainGenres: string[],
+): TmdbTranslation | null {
+  const parts = language.split("-");
+  const langCode = (parts[0] || "").toLowerCase();
+  const country = (parts[1] || "").toUpperCase();
+  if (!langCode) return null;
+
+  const entry = country
+    ? all.find(
+        (t) =>
+          (t.iso_639_1 || "").toLowerCase() === langCode &&
+          (t.iso_3166_1 || "").toUpperCase() === country,
+      )
+    : all.find((t) => (t.iso_639_1 || "").toLowerCase() === langCode);
+  if (!entry) return null;
+
+  const title = (
+    (mediaType === "movie" ? entry.data.title : entry.data.name) || ""
+  ).trim();
+  const overview = (entry.data.overview || "").trim();
+  const tagline = (entry.data.tagline || "").trim();
+
+  if (title.length === 0 && overview.length === 0 && tagline.length === 0) {
+    return null;
+  }
+
+  return { title, overview, tagline, genres: mainGenres };
 }
 
 function orderCandidates(

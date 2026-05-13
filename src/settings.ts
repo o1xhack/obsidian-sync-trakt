@@ -142,6 +142,18 @@ function isCustomLanguageMode(settings: TraktrSettings): boolean {
 }
 
 /**
+ * [0.9.0] Resolve the effective fallback metadata language. Returns "" when
+ * the fallback is disabled — in that case the translation pickers fall back
+ * to their pre-0.9.0 loose-match algorithm. Any non-empty return value
+ * triggers strict-match-then-fallback behaviour. See spec 0008.
+ */
+export function getEffectiveMetadataFallbackLanguage(
+  settings: TraktrSettings,
+): string {
+  return (settings.metadataFallbackLanguage || "").trim();
+}
+
+/**
  * Resolve the effective language code for picking a default note template.
  * Mirrors getEffectiveMetadataLanguage but for the templateLanguage field.
  */
@@ -181,6 +193,12 @@ export interface TraktrSettings {
   //   templateLanguage === "custom".
   metadataLanguage: string;
   customMetadataLanguage: string;
+  // [0.9.0] Secondary language used when the primary metadata language has no
+  // translation for an item. Empty "" = disabled, keeping the loose-match
+  // behaviour from 0.8.x (zh-CN finds zh-TW etc.). Any BCP-47 code = enable
+  // strict matching on the primary, then strict-match this fallback, then
+  // keep the English original. See spec 0008 for the full design.
+  metadataFallbackLanguage: string;
   uiLanguage: UiLanguage;
   templateLanguage: string;
   customTemplateLanguage: string;
@@ -1045,6 +1063,7 @@ export const DEFAULT_SETTINGS: TraktrSettings = {
 
   metadataLanguage: "",
   customMetadataLanguage: "",
+  metadataFallbackLanguage: "",
   uiLanguage: "en",
   templateLanguage: "",
   customTemplateLanguage: "",
@@ -1704,6 +1723,28 @@ export class TraktrSettingTab extends PluginSettingTab {
               await this.plugin.saveSettings();
             }),
         );
+    }
+
+    // [0.9.0 / spec 0008] Fallback language — only meaningful when the
+    // primary metadata language is active. Hidden otherwise to avoid
+    // implying it does something on its own.
+    if (langActive) {
+      new Setting(containerEl)
+        .setName(t("loc.fallbackLanguage.name"))
+        .setDesc(t("loc.fallbackLanguage.desc"))
+        .addDropdown((dd) => {
+          dd.addOption("", t("loc.fallbackLanguage.none"));
+          for (const [value, label] of METADATA_LANGUAGE_PRESETS) {
+            // Skip the "" entry — it's already the "no fallback" option above.
+            if (value === "") continue;
+            dd.addOption(value, label);
+          }
+          dd.setValue(this.plugin.settings.metadataFallbackLanguage || "");
+          dd.onChange(async (value) => {
+            this.plugin.settings.metadataFallbackLanguage = value;
+            await this.plugin.saveSettings();
+          });
+        });
     }
 
     // Plugin UI language

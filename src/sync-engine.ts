@@ -1,6 +1,9 @@
 import { App, Notice, TFile, TFolder, normalizePath } from "obsidian";
 import type { TraktrSettings } from "./settings";
-import { getEffectiveMetadataLanguage } from "./settings";
+import {
+  getEffectiveMetadataLanguage,
+  getEffectiveMetadataFallbackLanguage,
+} from "./settings";
 import { getTranslator } from "./i18n";
 import type {
   TraktWatchlistItem,
@@ -63,6 +66,17 @@ const TMDB_CONCURRENCY = 5;
  * is comfortably below the limit.
  */
 const TRAKT_TRANSLATION_CONCURRENCY = 5;
+
+/**
+ * [0.9.0] Extract the base language code from a BCP-47 string. `zh-CN` → `zh`,
+ * `en-US` → `en`, `en` → `en`. Used by the Trakt translation fetcher in
+ * strict-mode (spec 0008): we query Trakt with just `zh` so the response
+ * includes all variants (zh-CN, zh-TW, zh-HK, zh-SG), then filter
+ * strictly client-side in pickTraktTranslation.
+ */
+function baseLangCode(language: string): string {
+  return (language.split("-")[0] || "").toLowerCase();
+}
 
 /**
  * Progress reporter: called periodically with a human-readable status line.
@@ -662,15 +676,43 @@ export class SyncEngine {
   private async applyTraktTranslation(
     item: NormalizedItem,
     language: string,
+    fallbackLanguage: string = "",
   ): Promise<void> {
     const traktType = item.type === "movie" ? "movies" : "shows";
     const translations = await fetchTraktTranslations(
       traktType,
       item.ids.trakt,
-      language,
+      // [0.9.0] When fallback is set we need to query Trakt with the BASE
+      // language code (e.g. "zh") so we get all variants (zh-CN, zh-TW,
+      // zh-HK) in the response, then filter strictly client-side. With no
+      // fallback, the legacy behaviour passes the full code unchanged.
+      fallbackLanguage ? baseLangCode(language) : language,
       this.settings.clientId,
     );
-    const picked = pickTraktTranslation(translations, language);
+    const picked = pickTraktTranslation(translations, language, fallbackLanguage);
+    if (!picked && fallbackLanguage) {
+      // Strict primary missed — fetch the fallback language family and pick
+      // strictly from it.
+      const fbTranslations = await fetchTraktTranslations(
+        traktType,
+        item.ids.trakt,
+        baseLangCode(fallbackLanguage),
+        this.settings.clientId,
+      );
+      const fbPicked = pickTraktTranslation(
+        fbTranslations,
+        fallbackLanguage,
+        fallbackLanguage, // strict mode for the fallback walk too
+      );
+      if (!fbPicked) return;
+      applyTranslation(item, {
+        title: fbPicked.title,
+        overview: fbPicked.overview,
+        tagline: fbPicked.tagline,
+        genres: undefined,
+      });
+      return;
+    }
     if (!picked) return;
     applyTranslation(item, {
       title: picked.title,
@@ -706,6 +748,10 @@ export class SyncEngine {
     //   - 1000+ item libraries no longer blast the rate-limit bucket and
     //     silently lose posters/translations to swallowed 429s
     const language = getEffectiveMetadataLanguage(this.settings);
+    // [0.9.0] When set, enables strict-match-then-fallback semantics in both
+    // the TMDB picker and the Trakt translation endpoint. Empty string =
+    // current loose behaviour (spec 0008).
+    const fallbackLanguage = getEffectiveMetadataFallbackLanguage(this.settings);
     const itemList = [...mergedItems.values()];
     if (this.settings.tmdbApiKey) {
       await processWithConcurrency(
@@ -716,7 +762,7 @@ export class SyncEngine {
             // No TMDB ID — try Trakt's translation endpoint as a fallback
             // when i18n is enabled. Posters require TMDB, so we skip those.
             if (language) {
-              await this.applyTraktTranslation(item, language);
+              await this.applyTraktTranslation(item, language, fallbackLanguage);
             }
             return;
           }
@@ -732,6 +778,7 @@ export class SyncEngine {
             language,
             this.settings.tmdbCache,
             this.settings.tmdbCacheTtlDays,
+            fallbackLanguage,
           );
           item.poster_url = meta.poster_url;
           if (meta.translation) {
@@ -747,7 +794,7 @@ export class SyncEngine {
       await processWithConcurrency(
         itemList,
         TRAKT_TRANSLATION_CONCURRENCY,
-        (item) => this.applyTraktTranslation(item, language),
+        (item) => this.applyTraktTranslation(item, language, fallbackLanguage),
         (done, total) =>
           onProgress?.(t("progress.fetchingTranslations", { done, total })),
       );

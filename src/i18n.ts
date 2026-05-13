@@ -416,6 +416,21 @@ const STRINGS = {
     en: "Language code",
     "zh-CN": "语言代码",
   },
+
+  // [0.9.0] Metadata fallback language — spec 0008.
+  "loc.fallbackLanguage.name": {
+    en: "Fallback language",
+    "zh-CN": "回退语言",
+  },
+  "loc.fallbackLanguage.desc": {
+    en: "If your metadata language has no translation for an item, try this one instead. When set, the primary language becomes a strict match — variants like zh-TW won't substitute for zh-CN. The English original is always kept as the final fallback in *_original_* frontmatter fields.",
+    "zh-CN":
+      "当主语言没有对应翻译时，使用这个语言作为回退。设置回退后，主语言变成严格匹配 —— 比如设了简体中文就不会再用繁体中文凑数。英文原文始终保留在 *_original_* frontmatter 字段中作为最终回退。",
+  },
+  "loc.fallbackLanguage.none": {
+    en: "No fallback (loose match)",
+    "zh-CN": "不回退（宽松匹配）",
+  },
   "loc.uiLanguage.name": {
     en: "Plugin UI language",
     "zh-CN": "插件界面语言",

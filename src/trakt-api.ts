@@ -366,16 +366,85 @@ export async function fetchTraktTranslations(
 }
 
 /**
- * Pick the most relevant translation entry for the requested BCP-47 language:
+ * Pick the most relevant translation entry for the requested BCP-47 language.
+ *
+ * Two algorithms, selected by whether `fallbackLanguage` is provided:
+ *
+ * - **No fallback (legacy, default)** — loose match:
  *   1. exact language + country match (e.g. zh-CN → language=zh, country=cn)
- *   2. first language-only match
- *   3. null when nothing fits
+ *   2. first language-only match (zh-CN finds zh-TW, zh-HK, etc.)
+ *   3. null
+ *
+ *   This is the pre-0.9.0 behaviour. Preserved for users who haven't opted
+ *   into strict matching.
+ *
+ * - **With fallback (0.9.0+, spec 0008)** — strict primary + strict fallback:
+ *   1. strict match on `primary` (exact lang+country, or lang-only when the
+ *      primary code has no country component)
+ *   2. strict match on `fallbackLanguage`
+ *   3. null
+ *
+ *   "Strict" means we never substitute a different country for an explicitly
+ *   requested one. Set primary=zh-CN, fallback=en, and a zh-TW-only entry on
+ *   Trakt → we return null (caller keeps the English original) instead of
+ *   silently producing a traditional-Chinese title.
  */
 export function pickTraktTranslation(
   translations: TraktTranslation[],
-  language: string,
+  primary: string,
+  fallbackLanguage?: string,
 ): TraktTranslation | null {
   if (translations.length === 0) return null;
+
+  if (fallbackLanguage) {
+    return (
+      strictMatch(translations, primary) ||
+      strictMatch(translations, fallbackLanguage) ||
+      null
+    );
+  }
+
+  // Legacy loose-match path — unchanged from 0.8.x.
+  return looseMatch(translations, primary);
+}
+
+/**
+ * Strict lookup: respects the country code if present in the request.
+ * `zh-CN` requires lang=zh AND country=cn. `en` (no country) matches any
+ * lang=en entry regardless of country.
+ */
+function strictMatch(
+  translations: TraktTranslation[],
+  language: string,
+): TraktTranslation | null {
+  const parts = language.split("-");
+  const langCode = (parts[0] || "").toLowerCase();
+  const countryCode = (parts[1] || "").toLowerCase();
+  if (!langCode) return null;
+
+  if (countryCode) {
+    return (
+      translations.find(
+        (t) =>
+          t.language?.toLowerCase() === langCode &&
+          (t.country || "").toLowerCase() === countryCode,
+      ) || null
+    );
+  }
+
+  return (
+    translations.find((t) => t.language?.toLowerCase() === langCode) || null
+  );
+}
+
+/**
+ * Legacy loose lookup — preserved verbatim from pre-0.9.0 to keep
+ * fallback-disabled users on byte-identical behaviour.
+ */
+function looseMatch(
+  translations: TraktTranslation[],
+  language: string,
+): TraktTranslation | null {
   const parts = language.split("-");
   const langCode = (parts[0] || "").toLowerCase();
   const countryCode = (parts[1] || "").toLowerCase();
