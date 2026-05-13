@@ -392,9 +392,9 @@ const STRINGS = {
     "zh-CN": "元数据语言",
   },
   "loc.metadataLanguage.desc": {
-    en: "Translates title, overview, tagline, and genres in your synced notes via TMDB. Original English values are preserved in *_original_* frontmatter fields. Tags are not affected. If your filename template uses {{title}}, changing the language will rename notes on next sync — consider switching to {{original_title}} ({{year}}) first. TMDB API key is required for translations; without it, falls back to Trakt's translation endpoint (covers title/overview/tagline only, no genres).",
+    en: "Translates title, overview, tagline, and genres in your synced notes via TMDB. Original English values are preserved in *_original_* frontmatter fields. Tags are not affected. If your filename template uses {{title}}, changing the language renames existing notes on the next sync (controlled by \"Auto-rename on language change\" below). TMDB API key is required for translations; without it, falls back to Trakt's translation endpoint (covers title/overview/tagline only, no genres).",
     "zh-CN":
-      "通过 TMDB 翻译同步笔记中的 title、overview、tagline 和 genres。原始英文值保留在 *_original_* frontmatter 字段中。标签不受影响。如果你的文件名模板使用 {{title}}，切换语言会在下次同步时重命名笔记 —— 建议先把模板改为 {{original_title}} ({{year}})。翻译需要 TMDB API 密钥；没有 TMDB 密钥时会回退到 Trakt 的翻译端点（仅覆盖 title/overview/tagline，不包含 genres）。",
+      "通过 TMDB 翻译同步笔记中的 title、overview、tagline 和 genres。原始英文值保留在 *_original_* frontmatter 字段中。标签不受影响。如果你的文件名模板使用 {{title}}，切换语言时下次同步会自动重命名已有笔记（由下方「切换语言时自动重命名」控制）。翻译需要 TMDB API 密钥；没有 TMDB 密钥时会回退到 Trakt 的翻译端点（仅覆盖 title/overview/tagline，不包含 genres）。",
   },
   "loc.metadataLanguage.default": {
     en: "Default (English / Trakt original)",
@@ -430,6 +430,57 @@ const STRINGS = {
   "loc.fallbackLanguage.none": {
     en: "No fallback (loose match)",
     "zh-CN": "不回退（宽松匹配）",
+  },
+
+  // [1.0.0 / spec 0009] Auto-rename + Rename now controls.
+  "loc.autoRename.name": {
+    en: "Auto-rename on language change",
+    "zh-CN": "切换语言时自动重命名",
+  },
+  "loc.autoRename.desc": {
+    en: "When you change Metadata language or Fallback language, existing notes are renamed on the next sync to match the new title. Internal Obsidian links auto-update. Note content (frontmatter + body) is updated either way; this only controls the filename.",
+    "zh-CN":
+      "切换主语言或回退语言后，下次同步会自动重命名已有笔记，让文件名跟新标题一致。Obsidian 内链会自动更新。无论开关如何，frontmatter 和正文都会被更新；这里只控制文件名是否跟着改。",
+  },
+  "loc.renameNow.name": {
+    en: "Rename existing notes now",
+    "zh-CN": "现在重命名已有笔记",
+  },
+  "loc.renameNow.desc": {
+    en: "Walk every note in your sync folder and rename it to match your current language + filename-template settings. Useful when auto-rename was off, or to apply changes without waiting for the next sync. Note content is not touched.",
+    "zh-CN":
+      "扫描同步文件夹里的每一篇笔记，按当前的语言 + 文件名模板设置重命名。当自动重命名关闭、或者你不想等下次同步时使用。笔记内容不会被改动。",
+  },
+  "loc.renameNow.button": {
+    en: "Rename now",
+    "zh-CN": "立即重命名",
+  },
+  "loc.renameNow.done": {
+    en: "Sync Trakt: renamed {renamed} of {scanned} note(s).",
+    "zh-CN": "Sync Trakt：扫描 {scanned} 篇笔记，重命名 {renamed} 篇。",
+  },
+
+  // [1.0.0] First-1.0-launch modal — explains auto-rename to upgraders.
+  "oneZeroNotice.title": {
+    en: "Sync Trakt 1.0 — Auto-rename on language change",
+    "zh-CN": "Sync Trakt 1.0 — 切换语言时自动重命名",
+  },
+  "oneZeroNotice.body": {
+    en: "Existing notes will now be renamed when you change your metadata language, so filenames stay in sync with the title language.\n\n• Renames happen on the next sync (or manually via Settings → Localization → \"Rename now\")\n• Note content is unaffected — only the filename changes\n• Internal Obsidian links auto-update\n\nThis is enabled by default. You can turn it off in Settings → Localization at any time.",
+    "zh-CN":
+      "现在切换元数据语言时，已有笔记会被自动重命名，让文件名跟标题语言保持一致。\n\n• 下次同步时执行（或在「设置 → 本地化 → 立即重命名」手动触发）\n• 不会改动笔记内容，只改文件名\n• Obsidian 内链会自动更新\n\n默认开启。你可以随时在「设置 → 本地化」里关掉这个功能。",
+  },
+  "oneZeroNotice.keep": {
+    en: "Keep enabled",
+    "zh-CN": "保持开启",
+  },
+  "oneZeroNotice.disable": {
+    en: "Disable for now",
+    "zh-CN": "暂时关闭",
+  },
+  "oneZeroNotice.disabledNotice": {
+    en: "Sync Trakt: auto-rename disabled. Re-enable in Settings → Localization.",
+    "zh-CN": "Sync Trakt：自动重命名已关闭。可在「设置 → 本地化」中重新开启。",
   },
   "loc.uiLanguage.name": {
     en: "Plugin UI language",
@@ -731,6 +782,13 @@ const STRINGS = {
   "notice.syncCompleteWithFailures": {
     en: " {failed} failed.",
     "zh-CN": " 失败 {failed}。",
+  },
+  // [1.0.0] Optional suffix appended when one or more notes were renamed
+  // during the sync. Suppressed when 0 to keep the steady-state message
+  // (added/updated/unchanged/removed) uncluttered.
+  "notice.syncCompleteWithRenames": {
+    en: " {renamed} renamed.",
+    "zh-CN": " 重命名 {renamed}。",
   },
   "notice.syncFailed": {
     en: "Sync Trakt: sync failed — {msg}",

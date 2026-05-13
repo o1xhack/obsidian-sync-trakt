@@ -3027,6 +3027,107 @@ void (async () => {
     );
   }
 
+  // ── Test 61: [1.0.0 / spec 0009] disambiguatedFilename self-exclusion ─
+  // The rename-time closure passed to disambiguatedFilename must treat the
+  // file being renamed as NOT-a-collision (otherwise the disambiguator
+  // would tier up against itself, turning every rename into a tier-1 or
+  // tier-2 mangled filename even when the natural name is already free).
+  //
+  // We can't call maybeRenameExistingFile() directly here (needs App +
+  // vault). But the helper's correctness hinges entirely on the closure's
+  // behaviour, which we CAN test by passing a closure that mirrors what
+  // maybeRenameExistingFile builds.
+
+  console.log("\n[61] disambiguatedFilename — self-exclusion closure");
+  {
+    const item: NormalizedItem = {
+      ...makeMovie(),
+      title: "重生",
+      originalTitle: "Born Again",
+      ids: { trakt: 157810, slug: "born-again", imdb: "tt12015636", tmdb: 100857 },
+      year: 2020,
+    };
+
+    // The file being renamed currently lives at "重生 (2020).md". When we
+    // recompute the desired name, the tier-0 candidate is also "重生
+    // (2020)". Without self-exclusion the closure would say "taken!" and
+    // we'd uselessly bump to tier 1. With self-exclusion the closure
+    // returns false for that path → tier 0 wins → no rename happens.
+    const currentPath = "Trakt/重生 (2020).md";
+    const isTakenWithSelfExclusion = (candidate: string): boolean => {
+      const candidatePath = `Trakt/${candidate}.md`;
+      if (candidatePath === currentPath) return false; // self-exclusion
+      return false; // no other files
+    };
+    const result = disambiguatedFilename(
+      item,
+      "{{title}} ({{year}})",
+      isTakenWithSelfExclusion,
+    );
+    assertEq(
+      result.filename,
+      "重生 (2020)",
+      "self-exclusion: natural tier-0 name wins when the only 'collision' is the file itself",
+    );
+    assertEq(result.tier, 0, "self-exclusion: tier === 0 (no false bump)");
+
+    // Real collision case: the file being renamed currently lives under
+    // a different name (e.g. it was previously a tier-1 disambiguated
+    // name), and the desired tier-0 name is occupied by ANOTHER file.
+    // Self-exclusion should NOT shield against this — disambiguator must
+    // tier up.
+    const currentPathTier1 = "Trakt/重生 (Born Again) (2020).md";
+    const isTakenWithRealCollision = (candidate: string): boolean => {
+      const candidatePath = `Trakt/${candidate}.md`;
+      if (candidatePath === currentPathTier1) return false; // self-exclusion
+      // Some OTHER file occupies the tier-0 name
+      return candidate === "重生 (2020)";
+    };
+    const result2 = disambiguatedFilename(
+      item,
+      "{{title}} ({{year}})",
+      isTakenWithRealCollision,
+    );
+    assertEq(
+      result2.filename,
+      "重生 (Born Again) (2020)",
+      "self-exclusion still respects real collisions: tier-1 fallback",
+    );
+    assertEq(result2.tier, 1, "self-exclusion: tier === 1 when other file genuinely collides");
+  }
+
+  // ── Test 62: [1.0.0] OneZeroNoticeModal i18n keys present in EN + zh-CN ─
+  // The modal renders four user-facing strings (title, body, two button
+  // labels) — they MUST exist in both locales so an upgraded user in
+  // either language gets a coherent dialog.
+
+  console.log("\n[62] 1.0 update-notice i18n keys present + non-empty in both langs");
+  {
+    const keys = [
+      "oneZeroNotice.title",
+      "oneZeroNotice.body",
+      "oneZeroNotice.keep",
+      "oneZeroNotice.disable",
+      "oneZeroNotice.disabledNotice",
+    ] as const;
+    for (const k of keys) {
+      const enMsg = t(k, "en");
+      const zhMsg = t(k, "zh-CN");
+      assertTrue(
+        enMsg.length > 0 && !enMsg.startsWith("oneZeroNotice."),
+        `en '${k}' resolves`,
+      );
+      assertTrue(
+        zhMsg.length > 0 && !zhMsg.startsWith("oneZeroNotice."),
+        `zh-CN '${k}' resolves`,
+      );
+      assertTrue(
+        enMsg !== zhMsg,
+        `'${k}': en and zh-CN actually differ`,
+      );
+    }
+  }
+
   console.log(`\n${"=".repeat(60)}`);
   console.log(`Smoke results: ${passes} passed, ${failures} failed`);
   console.log("=".repeat(60));

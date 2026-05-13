@@ -5,6 +5,7 @@ import {
   LOCAL_ELIGIBLE_KEYS,
   LOCAL_KEYS_STORAGE_KEY,
   LOCAL_STORAGE_PREFIX,
+  OneZeroNoticeModal,
   TraktrSettingTab,
   type LocalEligibleKey,
   type TraktrSettings,
@@ -253,6 +254,44 @@ export default class TraktrPlugin extends Plugin {
         void this.runSyncWithProgress();
       }, 5000);
     }
+
+    // [1.0.0] One-shot modal: introduces the new auto-rename behaviour
+    // to users upgrading from 0.9.x or earlier. Fires on the first
+    // 1.0.0 launch, marks the historyState flag, never fires again.
+    // Cross-device safe: the flag lives in data.json so both devices
+    // see "already shown" once one of them dismissed it.
+    if (!this.settings.historyState.firstOneZeroNoticeShown) {
+      // Defer to after Obsidian finishes loading so the modal opens
+      // on top of an idle workspace, not mid-startup.
+      window.setTimeout(() => {
+        this.showOneZeroNoticeModal();
+      }, 1500);
+    }
+  }
+
+  /**
+   * [1.0.0] Present the first-1.0-launch modal, then set the flag so it
+   * never shows again. The user can either keep auto-rename on (default)
+   * or disable it from the modal directly.
+   */
+  private showOneZeroNoticeModal(): void {
+    const tNow = getTranslator(this.settings.uiLanguage);
+    new OneZeroNoticeModal(
+      this.app,
+      tNow,
+      async () => {
+        // Keep enabled — just mark as shown.
+        this.settings.historyState.firstOneZeroNoticeShown = true;
+        await this.saveSettings();
+      },
+      async () => {
+        // Disable now — flip the setting AND mark as shown.
+        this.settings.autoRenameOnLanguageChange = false;
+        this.settings.historyState.firstOneZeroNoticeShown = true;
+        await this.saveSettings();
+        new Notice(tNow("oneZeroNotice.disabledNotice"), 5000);
+      },
+    ).open();
   }
 
   /**

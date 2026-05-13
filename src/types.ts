@@ -185,6 +185,11 @@ export interface HistoryState {
   // Empty string means "never run" (first sync after enabling).
   // See spec 0006 §"Catch-up algorithm".
   lastDailyNoteSyncedAt: string;
+  // [1.0.0] One-time flag — true after the user dismisses the
+  // "1.0 introduces auto-rename" modal. Stored in historyState (not
+  // localStorage) so cross-device users don't see the dialog twice.
+  // See spec 0009 §"Migration / backward compatibility".
+  firstOneZeroNoticeShown?: boolean;
 }
 
 export const EMPTY_HISTORY_STATE: HistoryState = {
@@ -194,6 +199,7 @@ export const EMPTY_HISTORY_STATE: HistoryState = {
   lastIncrementalSyncAt: "",
   lastFullRefreshAt: "",
   lastDailyNoteSyncedAt: "",
+  firstOneZeroNoticeShown: false,
 };
 
 /**
@@ -304,6 +310,8 @@ export interface SyncResult {
   updated: number;
   unchanged: number;
   removed: number;
+  /** [1.0.0] Notes whose filename was changed to match the current title. */
+  renamed: number;
   failed: number;
   errors: string[];
 }

@@ -1,6 +1,14 @@
-import { App, Modal, PluginSettingTab, Setting, Notice } from "obsidian";
+import {
+  App,
+  Modal,
+  Notice,
+  PluginSettingTab,
+  Setting,
+  normalizePath,
+} from "obsidian";
 import type TraktrPlugin from "./main";
 import { getTranslator, type UiLanguage } from "./i18n";
+import { renameAllNotes } from "./sync-engine";
 import {
   EMPTY_HISTORY_STATE,
   type HistoryState,
@@ -199,6 +207,13 @@ export interface TraktrSettings {
   // strict matching on the primary, then strict-match this fallback, then
   // keep the English original. See spec 0008 for the full design.
   metadataFallbackLanguage: string;
+  // [1.0.0] When true, every sync compares each existing note's filename
+  // against what the current title + filename-template would produce, and
+  // renames via app.fileManager.renameFile (which auto-updates internal
+  // Obsidian links). Default true to honour the long-broken description
+  // text that already promised this behaviour. Users who'd rather rename
+  // manually flip this off. See spec 0009.
+  autoRenameOnLanguageChange: boolean;
   uiLanguage: UiLanguage;
   templateLanguage: string;
   customTemplateLanguage: string;
@@ -1064,6 +1079,7 @@ export const DEFAULT_SETTINGS: TraktrSettings = {
   metadataLanguage: "",
   customMetadataLanguage: "",
   metadataFallbackLanguage: "",
+  autoRenameOnLanguageChange: true,
   uiLanguage: "en",
   templateLanguage: "",
   customTemplateLanguage: "",
@@ -1747,6 +1763,38 @@ export class TraktrSettingTab extends PluginSettingTab {
         });
     }
 
+    // [1.0.0 / spec 0009] Auto-rename toggle + Rename now button. Sits
+    // directly below Fallback language so the "language strategy" stack
+    // reads naturally top-to-bottom: pick primary → pick fallback →
+    // decide whether filenames should follow → one-shot fix-up button.
+    new Setting(containerEl)
+      .setName(t("loc.autoRename.name"))
+      .setDesc(t("loc.autoRename.desc"))
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.autoRenameOnLanguageChange)
+          .onChange(async (value) => {
+            this.plugin.settings.autoRenameOnLanguageChange = value;
+            await this.plugin.saveSettings();
+          }),
+      );
+
+    new Setting(containerEl)
+      .setName(t("loc.renameNow.name"))
+      .setDesc(t("loc.renameNow.desc"))
+      .addButton((btn) =>
+        btn.setButtonText(t("loc.renameNow.button")).onClick(async () => {
+          const tNow = getTranslator(this.plugin.settings.uiLanguage);
+          const { renamed, scanned } = await renameAllNotes(
+            this.plugin.app,
+            normalizePath(this.plugin.settings.folder),
+            this.plugin.settings.filenameTemplate,
+            this.plugin.settings.propertyPrefix,
+          );
+          new Notice(tNow("loc.renameNow.done", { renamed, scanned }), 5000);
+        }),
+      );
+
     // Plugin UI language
     this.addLocalToggle(
       new Setting(containerEl)
@@ -2291,6 +2339,69 @@ class BackfillConfirmModal extends Modal {
     confirmBtn.onclick = async () => {
       this.close();
       await this.onConfirm();
+    };
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+  }
+}
+
+/**
+ * [1.0.0 / spec 0009] One-shot modal shown the first time the user
+ * launches 1.0.0. Explains that auto-rename is on by default and offers
+ * to flip it off in one click. Dismissed = `historyState.firstOneZeroNoticeShown`
+ * gets set to true, so the dialog never re-appears (cross-device
+ * idempotent because the flag lives in vault-synced data.json, not
+ * localStorage).
+ */
+export class OneZeroNoticeModal extends Modal {
+  private translate: ReturnType<typeof getTranslator>;
+  private onKeepEnabled: () => Promise<void>;
+  private onDisable: () => Promise<void>;
+
+  constructor(
+    app: App,
+    translate: ReturnType<typeof getTranslator>,
+    onKeepEnabled: () => Promise<void>,
+    onDisable: () => Promise<void>,
+  ) {
+    super(app);
+    this.translate = translate;
+    this.onKeepEnabled = onKeepEnabled;
+    this.onDisable = onDisable;
+  }
+
+  onOpen(): void {
+    const { contentEl, titleEl } = this;
+    titleEl.setText(this.translate("oneZeroNotice.title"));
+
+    const body = this.translate("oneZeroNotice.body");
+    for (const para of body.split("\n")) {
+      if (para.trim() === "") {
+        contentEl.createEl("br");
+      } else {
+        contentEl.createEl("p", { text: para });
+      }
+    }
+
+    const btnContainer = contentEl.createDiv({ cls: "trakt-modal-buttons" });
+
+    const disableBtn = btnContainer.createEl("button", {
+      text: this.translate("oneZeroNotice.disable"),
+    });
+    disableBtn.onclick = async () => {
+      this.close();
+      await this.onDisable();
+    };
+
+    const keepBtn = btnContainer.createEl("button", {
+      text: this.translate("oneZeroNotice.keep"),
+      cls: "mod-cta",
+    });
+    keepBtn.onclick = async () => {
+      this.close();
+      await this.onKeepEnabled();
     };
   }
 

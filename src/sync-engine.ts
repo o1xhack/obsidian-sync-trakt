@@ -267,6 +267,136 @@ export function buildFilename(
  * Pure function: `isTaken(filename)` is the only side-effecting input,
  * making the policy fully unit-testable without an Obsidian vault.
  */
+/**
+ * [1.0.0 / spec 0009] Rename an existing note to match the current
+ * `item.title` + filename template if the two have drifted (typically
+ * because the user changed `metadataLanguage` or `metadataFallbackLanguage`,
+ * or edited the template). Uses `app.fileManager.renameFile` so internal
+ * Obsidian links to this note auto-update.
+ *
+ * Returns true if a rename actually happened, false otherwise. Bails when
+ * `autoRenameOnLanguageChange` is off, when the desired path equals the
+ * current path, or when something goes wrong (logged, swallowed).
+ *
+ * Self-collision exclusion: `disambiguatedFilename`'s `isTaken` callback
+ * here returns false for the file being renamed. Without this, the file
+ * always "collides" with itself and the disambiguator tiers up forever
+ * (turning "Reborn (2020).md" into "Reborn [157810] (2020).md" gratuitously).
+ */
+export async function maybeRenameExistingFile(
+  app: App,
+  file: TFile,
+  item: NormalizedItem,
+  folderPath: string,
+  template: string,
+): Promise<boolean> {
+  const { filename } = disambiguatedFilename(item, template, (candidate) => {
+    const candidatePath = normalizePath(`${folderPath}/${candidate}.md`);
+    if (candidatePath === file.path) return false; // self never collides with itself
+    return !!app.vault.getAbstractFileByPath(candidatePath);
+  });
+  const desiredPath = normalizePath(`${folderPath}/${filename}.md`);
+  if (desiredPath === file.path) return false;
+
+  try {
+    await app.fileManager.renameFile(file, desiredPath);
+    // fileManager.renameFile mutates file.path / file.name in place; the
+    // existing TFile reference stays valid for the diff/overwrite path
+    // that runs after this returns.
+    return true;
+  } catch (e) {
+    console.warn(
+      `[Traktr] Rename failed for ${file.path} → ${desiredPath}; keeping current name`,
+      e,
+    );
+    return false;
+  }
+}
+
+/**
+ * [1.0.0 / spec 0009] Standalone "Rename now" action — walks every note in
+ * the sync folder that has a `trakt_id` in its frontmatter, recomputes the
+ * desired filename from the current item title (read from frontmatter) +
+ * template, and renames if different.
+ *
+ * Used by:
+ *   - the Settings → Localization "Rename now" button (manual trigger)
+ *   - the post-1.0-upgrade modal's "I'll do it now" flow (not yet wired)
+ *
+ * Does NOT need the full sync engine — operates purely on the on-disk
+ * notes' current frontmatter. Returns `{ renamed, scanned }` so the UI can
+ * show a result count.
+ *
+ * Unlike the sync-time rename, this path doesn't have a `NormalizedItem`
+ * — instead it builds a minimal one from the existing frontmatter so
+ * `disambiguatedFilename` can compute the desired path. The minimal item
+ * preserves the same fields the filename template references
+ * (`{{title}}`, `{{original_title}}`, `{{year}}`, etc.). Anything else the
+ * template might reference isn't available here — those template variables
+ * render as empty strings, same as they would on a sync-time rename for an
+ * item with sparse data.
+ */
+export async function renameAllNotes(
+  app: App,
+  folderPath: string,
+  template: string,
+  propertyPrefix: string,
+): Promise<{ renamed: number; scanned: number }> {
+  const folder = app.vault.getAbstractFileByPath(folderPath);
+  if (!(folder instanceof TFolder)) return { renamed: 0, scanned: 0 };
+
+  let renamed = 0;
+  let scanned = 0;
+  const idKey = `${propertyPrefix}id`;
+  const typeKey = `${propertyPrefix}type`;
+  const titleKey = `${propertyPrefix}title`;
+  const originalTitleKey = `${propertyPrefix}original_title`;
+  const yearKey = `${propertyPrefix}year`;
+
+  for (const child of folder.children) {
+    if (!(child instanceof TFile) || child.extension !== "md") continue;
+    const content = await app.vault.cachedRead(child);
+    const { frontmatter } = parseFrontmatter(content);
+    const traktId = parseInt(frontmatter[idKey], 10);
+    const type = frontmatter[typeKey];
+    if (isNaN(traktId)) continue;
+    if (type !== "movie" && type !== "show") continue;
+    scanned++;
+
+    // Build a minimal NormalizedItem just for filename rendering.
+    // Properties not consulted by the template are left as empty defaults.
+    const synthItem = {
+      type,
+      title: frontmatter[titleKey] || "",
+      originalTitle: frontmatter[originalTitleKey] || "",
+      year: parseInt(frontmatter[yearKey], 10) || 0,
+      ids: { trakt: traktId, slug: "", imdb: "", tmdb: 0 },
+      overview: "",
+      genres: [],
+      runtime: 0,
+      rating: 0,
+      votes: 0,
+      certification: "",
+      country: "",
+      language: "",
+      status: "",
+      originalOverview: "",
+      originalGenres: [],
+    } as unknown as NormalizedItem;
+
+    const didRename = await maybeRenameExistingFile(
+      app,
+      child,
+      synthItem,
+      folderPath,
+      template,
+    );
+    if (didRename) renamed++;
+  }
+
+  return { renamed, scanned };
+}
+
 export function disambiguatedFilename(
   item: NormalizedItem,
   template: string,
@@ -367,7 +497,7 @@ export class SyncEngine {
     const t = getTranslator(this.settings.uiLanguage);
     if (this.syncing) {
       new Notice(t("notice.alreadySyncing"));
-      return { added: 0, updated: 0, unchanged: 0, removed: 0, failed: 0, errors: [] };
+      return { added: 0, updated: 0, unchanged: 0, removed: 0, renamed: 0, failed: 0, errors: [] };
     }
 
     this.syncing = true;
@@ -376,6 +506,7 @@ export class SyncEngine {
       updated: 0,
       unchanged: 0,
       removed: 0,
+      renamed: 0,
       failed: 0,
       errors: [],
     };
@@ -430,13 +561,18 @@ export class SyncEngine {
       }
 
       // 8. Show result
-      console.debug(`[Traktr] Sync complete — added: ${result.added}, updated: ${result.updated}, unchanged: ${result.unchanged}, removed: ${result.removed}, failed: ${result.failed}`);
+      console.debug(`[Traktr] Sync complete — added: ${result.added}, updated: ${result.updated}, unchanged: ${result.unchanged}, removed: ${result.removed}, renamed: ${result.renamed}, failed: ${result.failed}`);
       let msg = t("notice.syncComplete", {
         added: result.added,
         updated: result.updated,
         unchanged: result.unchanged,
         removed: result.removed,
       });
+      // [1.0.0] Surface rename count when non-zero — the common
+      // steady-state case is zero, so we'd rather suppress than add noise.
+      if (result.renamed > 0) {
+        msg += t("notice.syncCompleteWithRenames", { renamed: result.renamed });
+      }
       if (result.failed > 0) {
         msg += t("notice.syncCompleteWithFailures", { failed: result.failed });
         console.error(`[Traktr] Sync completed with ${result.failed} failure(s):`);
@@ -814,6 +950,23 @@ export class SyncEngine {
       }
       try {
         const existingFile = localNotes.get(key);
+
+        // [1.0.0] Rename if title/template drifted from filename. Runs
+        // BEFORE the create/overwrite/diff branching so any downstream
+        // path read uses the new filename. fileManager.renameFile mutates
+        // the TFile in place and auto-updates Obsidian internal links.
+        // No-op when the setting is off or the desired filename matches
+        // the current one.
+        if (existingFile && this.settings.autoRenameOnLanguageChange) {
+          const renamed = await maybeRenameExistingFile(
+            this.app,
+            existingFile,
+            item,
+            folderPath,
+            this.settings.filenameTemplate,
+          );
+          if (renamed) result.renamed++;
+        }
 
         if (!existingFile) {
           // CREATE — with two-tier filename disambiguation (spec 0.3.1).
