@@ -460,27 +460,27 @@ const STRINGS = {
     "zh-CN": "Sync Trakt：扫描 {scanned} 篇笔记，重命名 {renamed} 篇。",
   },
 
-  // [1.0.0] First-1.0-launch modal — explains auto-rename to upgraders.
-  "oneZeroNotice.title": {
-    en: "Sync Trakt 1.0 — Auto-rename on language change",
-    "zh-CN": "Sync Trakt 1.0 — 切换语言时自动重命名",
+  // [1.0.0] Generic "What's new" modal — fires on each new-version launch.
+  // See src/release-log.ts for the per-version bilingual content.
+  "whatsNew.title": {
+    en: "Sync Trakt — what's new",
+    "zh-CN": "Sync Trakt —— 更新说明",
   },
-  "oneZeroNotice.body": {
-    en: "Existing notes will now be renamed when you change your metadata language, so filenames stay in sync with the title language.\n\n• Renames happen on the next sync (or manually via Settings → Localization → \"Rename now\")\n• Note content is unaffected — only the filename changes\n• Internal Obsidian links auto-update\n\nThis is enabled by default. You can turn it off in Settings → Localization at any time.",
-    "zh-CN":
-      "现在切换元数据语言时，已有笔记会被自动重命名，让文件名跟标题语言保持一致。\n\n• 下次同步时执行（或在「设置 → 本地化 → 立即重命名」手动触发）\n• 不会改动笔记内容，只改文件名\n• Obsidian 内链会自动更新\n\n默认开启。你可以随时在「设置 → 本地化」里关掉这个功能。",
+  "whatsNew.bugfix": {
+    en: "Bug fix",
+    "zh-CN": "Bug 修复",
   },
-  "oneZeroNotice.keep": {
-    en: "Keep enabled",
-    "zh-CN": "保持开启",
+  "whatsNew.footer": {
+    en: "Full release notes are on GitHub.",
+    "zh-CN": "完整发布说明请见 GitHub。",
   },
-  "oneZeroNotice.disable": {
-    en: "Disable for now",
-    "zh-CN": "暂时关闭",
+  "whatsNew.github": {
+    en: "View on GitHub",
+    "zh-CN": "在 GitHub 查看",
   },
-  "oneZeroNotice.disabledNotice": {
-    en: "Sync Trakt: auto-rename disabled. Re-enable in Settings → Localization.",
-    "zh-CN": "Sync Trakt：自动重命名已关闭。可在「设置 → 本地化」中重新开启。",
+  "whatsNew.dismiss": {
+    en: "Got it",
+    "zh-CN": "知道了",
   },
   "loc.uiLanguage.name": {
     en: "Plugin UI language",

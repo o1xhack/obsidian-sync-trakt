@@ -185,11 +185,14 @@ export interface HistoryState {
   // Empty string means "never run" (first sync after enabling).
   // See spec 0006 §"Catch-up algorithm".
   lastDailyNoteSyncedAt: string;
-  // [1.0.0] One-time flag — true after the user dismisses the
-  // "1.0 introduces auto-rename" modal. Stored in historyState (not
-  // localStorage) so cross-device users don't see the dialog twice.
-  // See spec 0009 §"Migration / backward compatibility".
-  firstOneZeroNoticeShown?: boolean;
+  // [1.0.0] Last `manifest.version` for which the user has dismissed the
+  // What's-new modal. Empty string = never shown (or upgrading from
+  // a pre-1.0 build that didn't have this field). On every launch
+  // main.ts compares the current manifest version against this and
+  // opens the modal when newer. Stored here (not localStorage) so the
+  // dismissal propagates across devices via vault sync — Mac dismisses,
+  // iPhone doesn't re-prompt.
+  lastReleaseNoticeVersion?: string;
 }
 
 export const EMPTY_HISTORY_STATE: HistoryState = {
@@ -199,7 +202,7 @@ export const EMPTY_HISTORY_STATE: HistoryState = {
   lastIncrementalSyncAt: "",
   lastFullRefreshAt: "",
   lastDailyNoteSyncedAt: "",
-  firstOneZeroNoticeShown: false,
+  lastReleaseNoticeVersion: "",
 };
 
 /**

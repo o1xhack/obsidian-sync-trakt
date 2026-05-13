@@ -9,6 +9,7 @@ import {
 import type TraktrPlugin from "./main";
 import { getTranslator, type UiLanguage } from "./i18n";
 import { renameAllNotes } from "./sync-engine";
+import type { ReleaseLogEntry } from "./release-log";
 import {
   EMPTY_HISTORY_STATE,
   type HistoryState,
@@ -2348,60 +2349,77 @@ class BackfillConfirmModal extends Modal {
 }
 
 /**
- * [1.0.0 / spec 0009] One-shot modal shown the first time the user
- * launches 1.0.0. Explains that auto-rename is on by default and offers
- * to flip it off in one click. Dismissed = `historyState.firstOneZeroNoticeShown`
- * gets set to true, so the dialog never re-appears (cross-device
- * idempotent because the flag lives in vault-synced data.json, not
- * localStorage).
+ * [1.0.0] Persistent "What's new" modal. Fires on the first launch of
+ * each new plugin version: main.ts compares `manifest.version` against
+ * `historyState.lastReleaseNoticeVersion` and opens this when newer.
+ *
+ * Modeled on Notebook Navigator's update-notice pattern. Each release
+ * gets one line in the modal; bug-fix releases get a "(Bug fix)" tag.
+ * A "View on GitHub" secondary button jumps to the full release notes;
+ * the primary "Got it" dismisses and updates the stored version.
+ *
+ * Cross-device idempotent: the stored version lives in vault-synced
+ * data.json, so dismissing on Mac doesn't pop the modal again on iPhone.
  */
-export class OneZeroNoticeModal extends Modal {
+export class WhatsNewModal extends Modal {
   private translate: ReturnType<typeof getTranslator>;
-  private onKeepEnabled: () => Promise<void>;
-  private onDisable: () => Promise<void>;
+  private entries: ReleaseLogEntry[];
+  private uiLanguage: UiLanguage;
+  private onDismiss: () => Promise<void>;
 
   constructor(
     app: App,
     translate: ReturnType<typeof getTranslator>,
-    onKeepEnabled: () => Promise<void>,
-    onDisable: () => Promise<void>,
+    entries: ReleaseLogEntry[],
+    uiLanguage: UiLanguage,
+    onDismiss: () => Promise<void>,
   ) {
     super(app);
     this.translate = translate;
-    this.onKeepEnabled = onKeepEnabled;
-    this.onDisable = onDisable;
+    this.entries = entries;
+    this.uiLanguage = uiLanguage;
+    this.onDismiss = onDismiss;
   }
 
   onOpen(): void {
     const { contentEl, titleEl } = this;
-    titleEl.setText(this.translate("oneZeroNotice.title"));
+    titleEl.setText(this.translate("whatsNew.title"));
 
-    const body = this.translate("oneZeroNotice.body");
-    for (const para of body.split("\n")) {
-      if (para.trim() === "") {
-        contentEl.createEl("br");
-      } else {
-        contentEl.createEl("p", { text: para });
-      }
+    const list = contentEl.createEl("ul", { cls: "trakt-whatsnew-list" });
+    for (const entry of this.entries) {
+      const li = list.createEl("li");
+      const tag = entry.isBugfix
+        ? ` (${this.translate("whatsNew.bugfix")})`
+        : "";
+      const text = this.uiLanguage === "zh-CN" ? entry.zh : entry.en;
+      li.createEl("strong", { text: entry.version + tag });
+      li.appendText(": " + text);
     }
+
+    contentEl.createEl("p", {
+      cls: "trakt-whatsnew-footer",
+      text: this.translate("whatsNew.footer"),
+    });
 
     const btnContainer = contentEl.createDiv({ cls: "trakt-modal-buttons" });
 
-    const disableBtn = btnContainer.createEl("button", {
-      text: this.translate("oneZeroNotice.disable"),
+    const githubBtn = btnContainer.createEl("button", {
+      text: this.translate("whatsNew.github"),
     });
-    disableBtn.onclick = async () => {
-      this.close();
-      await this.onDisable();
+    githubBtn.onclick = () => {
+      window.open(
+        "https://github.com/o1xhack/obsidian-sync-trakt/releases",
+        "_blank",
+      );
     };
 
-    const keepBtn = btnContainer.createEl("button", {
-      text: this.translate("oneZeroNotice.keep"),
+    const dismissBtn = btnContainer.createEl("button", {
+      text: this.translate("whatsNew.dismiss"),
       cls: "mod-cta",
     });
-    keepBtn.onclick = async () => {
+    dismissBtn.onclick = async () => {
       this.close();
-      await this.onKeepEnabled();
+      await this.onDismiss();
     };
   }
 

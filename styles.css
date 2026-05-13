@@ -150,6 +150,28 @@
   font-size: 0.9em;
 }
 
+/* [1.0.0] What's-new modal — release-log list + footer. */
+.trakt-whatsnew-list {
+  margin: 0.5em 0 1em 1.5em;
+  padding: 0;
+  list-style: disc;
+}
+
+.trakt-whatsnew-list li {
+  margin: 0.45em 0;
+  line-height: 1.5;
+}
+
+.trakt-whatsnew-list li strong {
+  font-weight: 600;
+}
+
+.trakt-whatsnew-footer {
+  margin-top: 1em;
+  color: var(--text-muted);
+  font-size: 0.85em;
+}
+
 /* [0.8.0] Daily Notes sync mode — comparison table. */
 .trakt-sync-mode-table {
   width: 100%;

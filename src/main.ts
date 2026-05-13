@@ -5,11 +5,12 @@ import {
   LOCAL_ELIGIBLE_KEYS,
   LOCAL_KEYS_STORAGE_KEY,
   LOCAL_STORAGE_PREFIX,
-  OneZeroNoticeModal,
   TraktrSettingTab,
+  WhatsNewModal,
   type LocalEligibleKey,
   type TraktrSettings,
 } from "./settings";
+import { entriesNewerThan, isVersionNewer } from "./release-log";
 import { AuthModal } from "./trakt-auth";
 import { SyncEngine } from "./sync-engine";
 import { getTranslator, type UiLanguage } from "./i18n";
@@ -255,41 +256,46 @@ export default class TraktrPlugin extends Plugin {
       }, 5000);
     }
 
-    // [1.0.0] One-shot modal: introduces the new auto-rename behaviour
-    // to users upgrading from 0.9.x or earlier. Fires on the first
-    // 1.0.0 launch, marks the historyState flag, never fires again.
-    // Cross-device safe: the flag lives in data.json so both devices
-    // see "already shown" once one of them dismissed it.
-    if (!this.settings.historyState.firstOneZeroNoticeShown) {
-      // Defer to after Obsidian finishes loading so the modal opens
-      // on top of an idle workspace, not mid-startup.
+    // [1.0.0] What's-new modal: fires on the first launch of each new
+    // plugin version. Compares manifest.version against the stored
+    // last-shown version. Cross-device safe — the stored version lives
+    // in vault-synced data.json so dismissing on Mac doesn't pop on
+    // iPhone. See src/release-log.ts for the per-version content.
+    const currentVersion = this.manifest.version;
+    const lastShown =
+      this.settings.historyState.lastReleaseNoticeVersion || "";
+    if (isVersionNewer(currentVersion, lastShown)) {
+      // Defer 1.5s to let Obsidian finish startup — the modal opens
+      // on top of an idle workspace, not mid-load.
       window.setTimeout(() => {
-        this.showOneZeroNoticeModal();
+        this.showWhatsNewModal(currentVersion, lastShown);
       }, 1500);
     }
   }
 
   /**
-   * [1.0.0] Present the first-1.0-launch modal, then set the flag so it
-   * never shows again. The user can either keep auto-rename on (default)
-   * or disable it from the modal directly.
+   * [1.0.0] Render the What's-new modal with entries strictly newer
+   * than `sinceVersion`. After dismissal, store `currentVersion` so
+   * the modal won't re-fire until the NEXT release. If the filtered
+   * entry list happens to be empty (e.g. an unlogged patch bump),
+   * silently advance the stored version without opening the modal.
    */
-  private showOneZeroNoticeModal(): void {
+  private showWhatsNewModal(currentVersion: string, sinceVersion: string): void {
+    const entries = entriesNewerThan(sinceVersion);
+    if (entries.length === 0) {
+      this.settings.historyState.lastReleaseNoticeVersion = currentVersion;
+      void this.saveSettings();
+      return;
+    }
     const tNow = getTranslator(this.settings.uiLanguage);
-    new OneZeroNoticeModal(
+    new WhatsNewModal(
       this.app,
       tNow,
+      entries,
+      this.settings.uiLanguage,
       async () => {
-        // Keep enabled — just mark as shown.
-        this.settings.historyState.firstOneZeroNoticeShown = true;
+        this.settings.historyState.lastReleaseNoticeVersion = currentVersion;
         await this.saveSettings();
-      },
-      async () => {
-        // Disable now — flip the setting AND mark as shown.
-        this.settings.autoRenameOnLanguageChange = false;
-        this.settings.historyState.firstOneZeroNoticeShown = true;
-        await this.saveSettings();
-        new Notice(tNow("oneZeroNotice.disabledNotice"), 5000);
       },
     ).open();
   }

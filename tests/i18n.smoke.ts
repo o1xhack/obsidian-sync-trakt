@@ -92,6 +92,11 @@ import {
 } from "../src/settings";
 import { getTranslator, t } from "../src/i18n";
 import type { NormalizedItem } from "../src/types";
+import {
+  RELEASE_LOG,
+  entriesNewerThan,
+  isVersionNewer,
+} from "../src/release-log";
 
 let failures = 0;
 let passes = 0;
@@ -3096,34 +3101,115 @@ void (async () => {
     assertEq(result2.tier, 1, "self-exclusion: tier === 1 when other file genuinely collides");
   }
 
-  // ── Test 62: [1.0.0] OneZeroNoticeModal i18n keys present in EN + zh-CN ─
-  // The modal renders four user-facing strings (title, body, two button
-  // labels) — they MUST exist in both locales so an upgraded user in
-  // either language gets a coherent dialog.
+  // ── Test 62: [1.0.0] WhatsNewModal i18n keys present in EN + zh-CN ──
+  // The modal renders five chrome strings (title, "Bug fix" tag, footer,
+  // two buttons) — all MUST exist in both locales so an upgraded user
+  // in either language sees a coherent dialog. Per-version content
+  // (the actual log lines) is verified separately in test [63].
 
-  console.log("\n[62] 1.0 update-notice i18n keys present + non-empty in both langs");
+  console.log("\n[62] What's-new modal chrome i18n keys — EN + zh-CN");
   {
     const keys = [
-      "oneZeroNotice.title",
-      "oneZeroNotice.body",
-      "oneZeroNotice.keep",
-      "oneZeroNotice.disable",
-      "oneZeroNotice.disabledNotice",
+      "whatsNew.title",
+      "whatsNew.bugfix",
+      "whatsNew.footer",
+      "whatsNew.github",
+      "whatsNew.dismiss",
     ] as const;
     for (const k of keys) {
       const enMsg = t(k, "en");
       const zhMsg = t(k, "zh-CN");
       assertTrue(
-        enMsg.length > 0 && !enMsg.startsWith("oneZeroNotice."),
+        enMsg.length > 0 && !enMsg.startsWith("whatsNew."),
         `en '${k}' resolves`,
       );
       assertTrue(
-        zhMsg.length > 0 && !zhMsg.startsWith("oneZeroNotice."),
+        zhMsg.length > 0 && !zhMsg.startsWith("whatsNew."),
         `zh-CN '${k}' resolves`,
       );
       assertTrue(
         enMsg !== zhMsg,
         `'${k}': en and zh-CN actually differ`,
+      );
+    }
+  }
+
+  // ── Test 63: [1.0.0] release-log shape + comparator ─────────────────
+  // The release log feeds the What's-new modal. Catches two failure
+  // modes that would silently break the modal:
+  //   - missing en/zh field on an entry (TS would catch shape; this
+  //     also rejects empty strings)
+  //   - isVersionNewer breaking on edge cases (empty string, equal
+  //     versions, double-digit patch, ordering)
+
+  console.log("\n[63] release-log entries well-formed in both langs");
+  {
+    assertTrue(RELEASE_LOG.length > 0, "release log non-empty");
+    for (const entry of RELEASE_LOG) {
+      assertTrue(
+        /^\d+\.\d+\.\d+$/.test(entry.version),
+        `'${entry.version}': matches x.y.z`,
+      );
+      assertTrue(
+        entry.en.length > 0,
+        `'${entry.version}': en non-empty`,
+      );
+      assertTrue(
+        entry.zh.length > 0,
+        `'${entry.version}': zh non-empty`,
+      );
+      assertTrue(
+        entry.en !== entry.zh,
+        `'${entry.version}': en and zh actually differ`,
+      );
+    }
+
+    // Log must be in reverse-chronological order — main.ts relies on
+    // filtering preserving display order (newest first in the modal).
+    for (let i = 1; i < RELEASE_LOG.length; i++) {
+      assertTrue(
+        isVersionNewer(RELEASE_LOG[i - 1].version, RELEASE_LOG[i].version),
+        `entry ${i - 1} ('${RELEASE_LOG[i - 1].version}') strictly newer than entry ${i} ('${RELEASE_LOG[i].version}')`,
+      );
+    }
+  }
+
+  console.log("\n[64] isVersionNewer — strict semver-ish comparator");
+  {
+    assertTrue(isVersionNewer("1.0.0", "0.9.0"), "1.0.0 > 0.9.0");
+    assertTrue(isVersionNewer("0.9.0", "0.8.1"), "0.9.0 > 0.8.1");
+    assertTrue(isVersionNewer("0.7.10", "0.7.9"), "numeric, not lexicographic: 0.7.10 > 0.7.9");
+    assertTrue(!isVersionNewer("1.0.0", "1.0.0"), "strict: 1.0.0 NOT > 1.0.0");
+    assertTrue(!isVersionNewer("0.9.0", "1.0.0"), "0.9.0 NOT > 1.0.0");
+    assertTrue(isVersionNewer("1.0.0", ""), "empty 'never-seen' is lower than any version");
+    assertTrue(!isVersionNewer("", "1.0.0"), "empty NOT > any version");
+    assertTrue(!isVersionNewer("", ""), "empty NOT > empty");
+  }
+
+  console.log("\n[65] entriesNewerThan — filter to unseen versions");
+  {
+    // Empty sinceVersion → returns the entire log
+    const all = entriesNewerThan("");
+    assertEq(all.length, RELEASE_LOG.length, "empty since-version → full log");
+
+    // Equal to newest → empty
+    const newest = RELEASE_LOG[0].version;
+    const empty = entriesNewerThan(newest);
+    assertEq(empty.length, 0, "since=newest → no entries to show");
+
+    // Equal to some middle version → only strictly-newer ones
+    if (RELEASE_LOG.length >= 3) {
+      const middle = RELEASE_LOG[2].version;
+      const newer = entriesNewerThan(middle);
+      // Should be everything strictly above middle; middle itself excluded
+      assertEq(
+        newer.length,
+        2,
+        `since=middle (${middle}) → 2 newer entries`,
+      );
+      assertTrue(
+        !newer.some((e) => e.version === middle),
+        "filtered list does not include the since-version itself",
       );
     }
   }
