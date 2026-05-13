@@ -682,11 +682,17 @@ export async function manualBackfill(
 
 /**
  * Render 3 hardcoded example events for the settings-page live preview.
- * Uses the user's current language settings so they see what their
- * Daily Note entries will actually look like.
+ *
+ * [1.0.0] Uses the user's **UI** language for verb rendering, not the
+ * note-template language. Earlier behaviour (template language) was
+ * technically more accurate to "what your Daily Note will look like",
+ * but produced jarring English-UI + Chinese-preview combinations for
+ * users who'd set UI=en + templateLanguage=zh-CN. The description text
+ * now spells out that the preview shows the FORMAT in the current UI
+ * language, while actual Daily Note verbs follow templateLanguage.
  */
 export function renderPreview(settings: TraktrSettings): string {
-  const lang = getEffectiveTemplateLanguage(settings);
+  const lang = settings.uiLanguage || "en";
   const examples: DailyNoteEvent[] = [
     {
       timestamp: "2026-05-11T10:00:00Z",

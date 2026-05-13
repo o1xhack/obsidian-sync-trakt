@@ -52,9 +52,13 @@ const STRINGS = {
     "zh-CN": "⚠ 两个 marker 之间的内容由插件自动管理。今天的内容每次同步都会被覆盖；**请勿在 marker 之间手写内容** —— 会被覆盖掉。",
   },
   "daily.preview.name": { en: "Entry format preview", "zh-CN": "条目格式预览" },
+  // [1.0.0] Description updated: preview now renders in the UI language
+  // for readability, not the template language. The "actual Daily Notes
+  // use template language" clarification keeps users from being
+  // surprised when their notes look different from the preview.
   "daily.preview.desc": {
-    en: "Entries are formatted as: time — verb display. Verbs are translated based on your Note template language setting. The preview below uses your current settings.",
-    "zh-CN": "条目格式为：时间 — 动词 内容。动词跟随你的「笔记模板语言」设置翻译。下方预览按你当前设置渲染。",
+    en: "Entries are formatted as: time — verb display. The preview below renders verbs in your plugin UI language. Note: your actual Daily Notes use the Note template language setting — switch UI language to match if you want preview and output to look the same.",
+    "zh-CN": "条目格式为：时间 — 动词 内容。下方预览按你的插件 UI 语言渲染动词。注意：实际写入 Daily Notes 的动词跟随「笔记模板语言」设置 —— 如果想让预览和实际输出一致，把 UI 语言切到对应语言。",
   },
   "daily.sources.heading": { en: "Source events that appear in Daily Notes", "zh-CN": "在 Daily Notes 显示的事件类型" },
   "daily.sources.desc": {
