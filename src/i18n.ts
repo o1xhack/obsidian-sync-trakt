@@ -184,8 +184,8 @@ const STRINGS = {
   "daily.backfill.heading": { en: "Manual backfill", "zh-CN": "手动回溯" },
   "daily.backfill.days.name": { en: "Days to backfill", "zh-CN": "回溯天数" },
   "daily.backfill.days.desc": {
-    en: "How many past days to fill when you click the button below. Range 1-30.",
-    "zh-CN": "点击下方按钮时回溯多少天。范围 1-30。",
+    en: "How many past days to fill when you click the button below. Any positive integer (capped at 3650 = 10 years). Days without an existing Daily Note are silently skipped — no files are created, no Trakt / TMDB API calls are made.",
+    "zh-CN": "点击下方按钮时回溯多少天。任意正整数（上限 3650，即 10 年）。该天没有 Daily Note 文件就直接跳过 —— 不会新建文件、也不调用 Trakt / TMDB API。",
   },
   "daily.backfill.button": {
     en: "Backfill last {days} days",

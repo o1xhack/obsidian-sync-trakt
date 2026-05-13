@@ -658,7 +658,10 @@ export async function manualBackfill(
   days: number,
 ): Promise<{ wrote: number; skipped: number }> {
   const today = localTodayISODate();
-  const safeDays = Math.max(1, Math.min(30, days));
+  // [1.0.0] Cap raised from 30 → 3650 (10 years). Settings UI now uses
+  // a free text input instead of a 1-30 slider. Defensive ceiling stays
+  // so accidental "999999"-style typos don't walk a year of CPU.
+  const safeDays = Math.max(1, Math.min(3650, days));
   let cursor = addDaysISO(today, -(safeDays - 1));
   let wrote = 0;
   let skipped = 0;

@@ -289,7 +289,7 @@ export interface TraktrSettings {
   dailyNotesFilenameFormat: string;     // Moment.js, e.g. "YYYY-MM-DD"
   dailyNotesMarkerStart: string;        // default: "%% trakt:daily:start %%"
   dailyNotesMarkerEnd: string;          // default: "%% trakt:daily:end %%"
-  dailyNotesBackfillDays: number;       // 1..30 for manual button
+  dailyNotesBackfillDays: number;       // 1..3650 for manual button (1.0.0: was 1..30)
   // [0.8.0] Today-mode write strategy. "default" = full re-render every
   // sync (legacy behaviour, always reflects current Trakt state).
   // "incremental" = preserve existing lines, append-only (protects user
@@ -1324,22 +1324,49 @@ export class TraktrSettingTab extends PluginSettingTab {
     // Manual backfill — slider + button + modal
     new Setting(containerEl).setName(t("daily.backfill.heading")).setHeading();
 
+    // [1.0.0] Text input (was slider 1-30 in 0.7.0). Lets the user pick
+    // any positive integer up to ~10 years. Backfill is data-write-only
+    // (no Trakt API hits, no TMDB) and skips dates that don't have a
+    // Daily Note file, so even very large values don't have meaningful
+    // cost beyond filesystem touches for days that do exist.
+    //
+    // Live button-text update: we keep a reference to the button and
+    // call setButtonText on it from the input's onChange, instead of
+    // re-displaying the whole tab. Re-display would yank focus off the
+    // input on every keystroke.
+    let backfillButton: { setButtonText: (text: string) => void } | null = null;
+    const updateBackfillButtonText = (): void => {
+      backfillButton?.setButtonText(
+        t("daily.backfill.button", {
+          days: this.plugin.settings.dailyNotesBackfillDays,
+        }),
+      );
+    };
+
     new Setting(containerEl)
       .setName(t("daily.backfill.days.name"))
       .setDesc(t("daily.backfill.days.desc"))
-      .addSlider((slider) =>
-        slider
-          .setLimits(1, 30, 1)
-          .setValue(this.plugin.settings.dailyNotesBackfillDays)
-          .setDynamicTooltip()
+      .addText((text) =>
+        text
+          .setValue(String(this.plugin.settings.dailyNotesBackfillDays))
           .onChange(async (value) => {
-            this.plugin.settings.dailyNotesBackfillDays = value;
+            // Parse defensively: reject NaN, ≤0, or absurd. Cap at 3650
+            // (10 years) — beyond that is almost certainly a typo, and
+            // the cap protects against accidental million-day inputs
+            // taking unexpected disk time.
+            const parsed = parseInt(value, 10);
+            if (!Number.isFinite(parsed) || parsed <= 0) return;
+            this.plugin.settings.dailyNotesBackfillDays = Math.min(
+              3650,
+              parsed,
+            );
             await this.plugin.saveSettings();
-            this.display();
+            updateBackfillButtonText();
           }),
       );
 
-    new Setting(containerEl).addButton((btn) =>
+    new Setting(containerEl).addButton((btn) => {
+      backfillButton = btn;
       btn
         .setButtonText(
           t("daily.backfill.button", {
@@ -1367,8 +1394,8 @@ export class TraktrSettingTab extends PluginSettingTab {
               new Notice(t("daily.backfill.done", { wrote, skipped }), 8000);
             },
           ).open();
-        }),
-    );
+        });
+    });
 
     // [0.8.0] Sync mode selector + comparison table. Lives at the bottom
     // of the Daily Notes tab so users have all other config decided
