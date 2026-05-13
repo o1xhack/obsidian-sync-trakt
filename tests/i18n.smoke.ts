@@ -65,6 +65,8 @@ import {
   renderMarkerBlock,
   aggregateEventsForDate,
   computeDailyNotePath,
+  computeThisMonth,
+  computeLastMonth,
 } from "../src/daily-notes";
 import {
   EMPTY_HISTORY_STATE,
@@ -3271,6 +3273,49 @@ void (async () => {
         !newer.some((e) => e.version === middle),
         "filtered list does not include the since-version itself",
       );
+    }
+  }
+
+  // ── Test 66: [1.0.0] computeThisMonth / computeLastMonth ─────────────
+  // Backfill modal's "This month" / "Last month" presets depend on these.
+  // Bug-prone area (month rollover, year rollover, leap years), so
+  // we cover the four interesting edge cases.
+
+  console.log("\n[66] computeThisMonth / computeLastMonth — calendar math edge cases");
+  {
+    // Mid-month — straightforward
+    {
+      const tm = computeThisMonth("2026-05-13");
+      assertEq(tm.start, "2026-05-01", "thisMonth(May 13) start = May 1");
+      assertEq(tm.end, "2026-05-13", "thisMonth(May 13) end = today (clamped)");
+      const lm = computeLastMonth("2026-05-13");
+      assertEq(lm.start, "2026-04-01", "lastMonth(May 13) start = Apr 1");
+      assertEq(lm.end, "2026-04-30", "lastMonth(May 13) end = Apr 30");
+    }
+    // First day of month — same-day this-month, last month is fully filled
+    {
+      const tm = computeThisMonth("2026-05-01");
+      assertEq(tm.start, "2026-05-01", "thisMonth(May 1) start");
+      assertEq(tm.end, "2026-05-01", "thisMonth(May 1) end == today");
+      const lm = computeLastMonth("2026-05-01");
+      assertEq(lm.end, "2026-04-30", "lastMonth(May 1) end = Apr 30");
+    }
+    // Year rollover — January
+    {
+      const tm = computeThisMonth("2026-01-15");
+      assertEq(tm.start, "2026-01-01", "thisMonth(Jan 15) start");
+      const lm = computeLastMonth("2026-01-15");
+      assertEq(lm.start, "2025-12-01", "lastMonth(Jan 15) start = prev year Dec 1");
+      assertEq(lm.end, "2025-12-31", "lastMonth(Jan 15) end = prev year Dec 31");
+    }
+    // February-after-March — leap year + non-leap year
+    {
+      // 2024 is a leap year, so Feb has 29 days
+      const lm2024 = computeLastMonth("2024-03-10");
+      assertEq(lm2024.end, "2024-02-29", "lastMonth(Mar 10, 2024 leap) end = Feb 29");
+      // 2025 is not leap, Feb has 28 days
+      const lm2025 = computeLastMonth("2025-03-10");
+      assertEq(lm2025.end, "2025-02-28", "lastMonth(Mar 10, 2025) end = Feb 28");
     }
   }
 

@@ -59,6 +59,37 @@ export function addDaysISO(date: string, days: number): string {
   return localTodayISODate(dt);
 }
 
+/**
+ * [1.0.0] Return inclusive `{start, end}` ISO dates for the calendar
+ * month that contains `today`. `end` clamps at today — we don't preview
+ * future days for the current month even though they exist on the
+ * calendar. Used by BackfillRangeModal's "This month" preset.
+ */
+export function computeThisMonth(today: string): { start: string; end: string } {
+  const [y, m] = today.split("-").map(Number);
+  const start = `${y}-${String(m).padStart(2, "0")}-01`;
+  return { start, end: today };
+}
+
+/**
+ * [1.0.0] Return inclusive `{start, end}` ISO dates for the previous
+ * calendar month relative to `today`. Both endpoints are full-month
+ * (no clamping needed — last month is fully in the past).
+ * Used by BackfillRangeModal's "Last month" preset.
+ */
+export function computeLastMonth(today: string): { start: string; end: string } {
+  const [y, m] = today.split("-").map(Number);
+  const prevY = m === 1 ? y - 1 : y;
+  const prevM = m === 1 ? 12 : m - 1;
+  const start = `${prevY}-${String(prevM).padStart(2, "0")}-01`;
+  // `new Date(y, m-1, 0)` returns day 0 of month (m-1) 0-indexed,
+  // which == last day of the previous month (1-indexed). E.g. today
+  // is May (m=5) → Date(y, 4, 0) = April 30.
+  const lastDay = new Date(y, m - 1, 0).getDate();
+  const end = `${prevY}-${String(prevM).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+  return { start, end };
+}
+
 /** Inclusive day delta between two "YYYY-MM-DD" strings: from <= to. */
 export function daysBetweenISO(from: string, to: string): number {
   const [fy, fm, fd] = from.split("-").map(Number);
@@ -647,26 +678,55 @@ export async function processDate(
 }
 
 /**
- * Manual backfill — walks `today - days + 1` through today, ignoring
- * the cursor. After completion, advances cursor to today.
+ * Manual backfill — walks each day in [fromDateISO, toDateISO] inclusive.
  *
- * Same safety as catch-up: past days are add-only. Today always
- * overwrites.
+ * [1.0.0] Signature changed from `(host, days)` to `(host, fromDateISO,
+ * toDateISO)` so the settings UI can offer a real date-range picker
+ * instead of "last N days". Days are processed in their per-day mode:
+ * `cursor === today` → overwrite (today mode); anything else → add-only
+ * (past mode, preserves existing marker content).
+ *
+ * Defensive handling:
+ *   - end < start → returns { wrote: 0, skipped: 0 } immediately
+ *   - end > today → clamped to today (no point processing the future)
+ *   - range longer than 3650 days (10 years) → clamped from the end,
+ *     so the user gets the most recent 10 years if they ask for absurd
+ *     ranges. Same ceiling we had on the old days-based API.
+ *
+ * Advances `lastDailyNoteSyncedAt` to today on completion (the auto
+ * catch-up cursor — manual backfill shouldn't leave the catch-up
+ * thinking it needs to re-walk days it just processed).
  */
+const MANUAL_BACKFILL_MAX_DAYS = 3650;
+
 export async function manualBackfill(
   host: DailyNotesHost,
-  days: number,
+  fromDateISO: string,
+  toDateISO: string,
 ): Promise<{ wrote: number; skipped: number }> {
   const today = localTodayISODate();
-  // [1.0.0] Cap raised from 30 → 3650 (10 years). Settings UI now uses
-  // a free text input instead of a 1-30 slider. Defensive ceiling stays
-  // so accidental "999999"-style typos don't walk a year of CPU.
-  const safeDays = Math.max(1, Math.min(3650, days));
-  let cursor = addDaysISO(today, -(safeDays - 1));
+
+  let from = fromDateISO;
+  let to = toDateISO;
+
+  // Clamp end to today — processing the future doesn't make sense and
+  // the per-day code path would just hit "skipped_no_file" anyway.
+  if (to > today) to = today;
+
+  // Inverted range → no-op. Caller should disable the confirm button
+  // before reaching here, but be safe.
+  if (from > to) return { wrote: 0, skipped: 0 };
+
+  // Cap excessive ranges from the start side (keep the most recent slice).
+  if (daysBetweenISO(from, to) >= MANUAL_BACKFILL_MAX_DAYS) {
+    from = addDaysISO(to, -(MANUAL_BACKFILL_MAX_DAYS - 1));
+  }
+
+  let cursor = from;
   let wrote = 0;
   let skipped = 0;
 
-  while (cursor <= today) {
+  while (cursor <= to) {
     const mode = cursor === today ? "today" : "past";
     const result = await processDate(host, cursor, mode);
     if (result.status === "wrote_new" || result.status === "overwrote") {

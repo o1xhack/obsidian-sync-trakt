@@ -17,7 +17,17 @@ import {
 } from "./types";
 import { clearTmdbCache, tmdbCacheStats, verifyTmdbApiKey } from "./tmdb-api";
 import { clearHistoryState, historyStateStats } from "./history-state";
-import { manualBackfill, renderPreview, type DailyNotesHost } from "./daily-notes";
+import {
+  manualBackfill,
+  renderPreview,
+  computeDailyNotePath,
+  daysBetweenISO,
+  addDaysISO,
+  localTodayISODate,
+  computeThisMonth,
+  computeLastMonth,
+  type DailyNotesHost,
+} from "./daily-notes";
 
 export const POSTER_SIZES = [
   "w92",
@@ -289,7 +299,10 @@ export interface TraktrSettings {
   dailyNotesFilenameFormat: string;     // Moment.js, e.g. "YYYY-MM-DD"
   dailyNotesMarkerStart: string;        // default: "%% trakt:daily:start %%"
   dailyNotesMarkerEnd: string;          // default: "%% trakt:daily:end %%"
-  dailyNotesBackfillDays: number;       // 1..3650 for manual button (1.0.0: was 1..30)
+  // [1.0.0] Removed: dailyNotesBackfillDays. Backfill UI is now a
+  // date-range modal (BackfillRangeModal) — there's no persistent
+  // "default N days" preference any more. Old values in users'
+  // data.json are simply ignored by Object.assign(DEFAULT_SETTINGS, …).
   // [0.8.0] Today-mode write strategy. "default" = full re-render every
   // sync (legacy behaviour, always reflects current Trakt state).
   // "incremental" = preserve existing lines, append-only (protects user
@@ -1127,7 +1140,6 @@ export const DEFAULT_SETTINGS: TraktrSettings = {
   dailyNotesFilenameFormat: "YYYY-MM-DD",
   dailyNotesMarkerStart: "%% trakt:daily:start %%",
   dailyNotesMarkerEnd: "%% trakt:daily:end %%",
-  dailyNotesBackfillDays: 7,
   dailyNotesSyncMode: "default",
 };
 
@@ -1324,61 +1336,19 @@ export class TraktrSettingTab extends PluginSettingTab {
     // Manual backfill — slider + button + modal
     new Setting(containerEl).setName(t("daily.backfill.heading")).setHeading();
 
-    // [1.0.0] Text input (was slider 1-30 in 0.7.0). Lets the user pick
-    // any positive integer up to ~10 years. Backfill is data-write-only
-    // (no Trakt API hits, no TMDB) and skips dates that don't have a
-    // Daily Note file, so even very large values don't have meaningful
-    // cost beyond filesystem touches for days that do exist.
-    //
-    // Live button-text update: we keep a reference to the button and
-    // call setButtonText on it from the input's onChange, instead of
-    // re-displaying the whole tab. Re-display would yank focus off the
-    // input on every keystroke.
-    let backfillButton: { setButtonText: (text: string) => void } | null = null;
-    const updateBackfillButtonText = (): void => {
-      backfillButton?.setButtonText(
-        t("daily.backfill.button", {
-          days: this.plugin.settings.dailyNotesBackfillDays,
-        }),
-      );
-    };
-
+    // [1.0.0] Single button → date-range modal. Replaces the 0.7.0
+    // slider + 1.0.0 N-days text input. The modal lets the user pick
+    // any start/end pair, with quick-preset buttons for common ranges.
     new Setting(containerEl)
-      .setName(t("daily.backfill.days.name"))
-      .setDesc(t("daily.backfill.days.desc"))
-      .addText((text) =>
-        text
-          .setValue(String(this.plugin.settings.dailyNotesBackfillDays))
-          .onChange(async (value) => {
-            // Parse defensively: reject NaN, ≤0, or absurd. Cap at 3650
-            // (10 years) — beyond that is almost certainly a typo, and
-            // the cap protects against accidental million-day inputs
-            // taking unexpected disk time.
-            const parsed = parseInt(value, 10);
-            if (!Number.isFinite(parsed) || parsed <= 0) return;
-            this.plugin.settings.dailyNotesBackfillDays = Math.min(
-              3650,
-              parsed,
-            );
-            await this.plugin.saveSettings();
-            updateBackfillButtonText();
-          }),
-      );
-
-    new Setting(containerEl).addButton((btn) => {
-      backfillButton = btn;
-      btn
-        .setButtonText(
-          t("daily.backfill.button", {
-            days: this.plugin.settings.dailyNotesBackfillDays,
-          }),
-        )
-        .onClick(() => {
-          new BackfillConfirmModal(
+      .setName(t("daily.backfill.modal.title"))
+      .setDesc(t("daily.backfill.button.desc"))
+      .addButton((btn) =>
+        btn.setButtonText(t("daily.backfill.button")).onClick(() => {
+          new BackfillRangeModal(
             this.plugin.app,
-            this.plugin.settings.dailyNotesBackfillDays,
+            this.plugin.settings,
             t,
-            async () => {
+            async (fromDate, toDate) => {
               const host: DailyNotesHost = {
                 app: this.plugin.app,
                 settings: this.plugin.settings,
@@ -1389,13 +1359,14 @@ export class TraktrSettingTab extends PluginSettingTab {
               };
               const { wrote, skipped } = await manualBackfill(
                 host,
-                this.plugin.settings.dailyNotesBackfillDays,
+                fromDate,
+                toDate,
               );
               new Notice(t("daily.backfill.done", { wrote, skipped }), 8000);
             },
           ).open();
-        });
-    });
+        }),
+      );
 
     // [0.8.0] Sync mode selector + comparison table. Lives at the bottom
     // of the Daily Notes tab so users have all other config decided
@@ -2319,60 +2290,228 @@ export class TraktrSettingTab extends PluginSettingTab {
 }
 
 /**
- * [0.7.0] Confirmation modal for the manual backfill button (spec 0006).
- * Explains the safety rules in plain language before the user can
- * confirm a potentially-disruptive operation.
+ * [1.0.0] Date-range backfill modal (replaces the 0.7.0 N-days
+ * confirmation modal). User picks a start + end date with native
+ * `<input type="date">` controls, optionally via one of four quick
+ * presets (last 7 / last 30 / this month / last month). Modal shows
+ * live counts: total days in range + how many of those days already
+ * have a Daily Note file on disk. Confirm button disables when the
+ * range is invalid (start > end).
+ *
+ * Safety contract from spec 0006 still holds: past-day mode is
+ * add-only on existing markered content, today gets overwrite mode.
+ * The same `manualBackfill` function processes either mode per day.
  */
-class BackfillConfirmModal extends Modal {
-  private days: number;
+export class BackfillRangeModal extends Modal {
+  private settings: TraktrSettings;
   private translate: ReturnType<typeof getTranslator>;
-  private onConfirm: () => Promise<void>;
+  private onConfirm: (fromDate: string, toDate: string) => Promise<void>;
+  // Mutable UI state, rebuilt on every change to keep stats live.
+  private fromDate: string;
+  private toDate: string;
+  private rangeDaysEl: HTMLElement | null = null;
+  private existingNotesEl: HTMLElement | null = null;
+  private invalidEl: HTMLElement | null = null;
+  private confirmBtn: HTMLButtonElement | null = null;
+  private fromInput: HTMLInputElement | null = null;
+  private toInput: HTMLInputElement | null = null;
 
   constructor(
     app: App,
-    days: number,
+    settings: TraktrSettings,
     translate: ReturnType<typeof getTranslator>,
-    onConfirm: () => Promise<void>,
+    onConfirm: (fromDate: string, toDate: string) => Promise<void>,
   ) {
     super(app);
-    this.days = days;
+    this.settings = settings;
     this.translate = translate;
+    // Default range: last 7 days (matches the old default).
+    this.toDate = localTodayISODate();
+    this.fromDate = addDaysISO(this.toDate, -6);
     this.onConfirm = onConfirm;
   }
 
   onOpen(): void {
     const { contentEl, titleEl } = this;
-    titleEl.setText(this.translate("daily.backfill.modal.title", { days: this.days }));
+    titleEl.setText(this.translate("daily.backfill.modal.title"));
 
-    // Multi-line body — split on \n so each paragraph renders separately
-    const body = this.translate("daily.backfill.modal.body", { days: this.days });
+    // ── Preset row ──
+    const presetWrap = contentEl.createDiv({ cls: "trakt-backfill-presets" });
+    presetWrap.createEl("span", {
+      cls: "trakt-backfill-preset-label",
+      text: this.translate("daily.backfill.modal.presetLabel") + ":",
+    });
+    const today = localTodayISODate();
+    const mkPreset = (
+      label: string,
+      from: string,
+      to: string,
+    ): void => {
+      const btn = presetWrap.createEl("button", {
+        cls: "trakt-backfill-preset-btn",
+        text: label,
+      });
+      btn.onclick = () => {
+        this.fromDate = from;
+        this.toDate = to;
+        if (this.fromInput) this.fromInput.value = from;
+        if (this.toInput) this.toInput.value = to;
+        this.refresh();
+      };
+    };
+    mkPreset(this.translate("daily.backfill.modal.preset.last7"),
+      addDaysISO(today, -6), today);
+    mkPreset(this.translate("daily.backfill.modal.preset.last30"),
+      addDaysISO(today, -29), today);
+    const monthBounds = computeThisMonth(today);
+    mkPreset(this.translate("daily.backfill.modal.preset.thisMonth"),
+      monthBounds.start, monthBounds.end);
+    const lastMonth = computeLastMonth(today);
+    mkPreset(this.translate("daily.backfill.modal.preset.lastMonth"),
+      lastMonth.start, lastMonth.end);
+
+    // ── Date inputs ──
+    new Setting(contentEl)
+      .setName(this.translate("daily.backfill.modal.startDate"))
+      .then((setting) => {
+        this.fromInput = setting.controlEl.createEl("input", {
+          attr: { type: "date", value: this.fromDate },
+        });
+        this.fromInput.addEventListener("change", () => {
+          this.fromDate = this.fromInput!.value;
+          this.refresh();
+        });
+      });
+
+    new Setting(contentEl)
+      .setName(this.translate("daily.backfill.modal.endDate"))
+      .then((setting) => {
+        this.toInput = setting.controlEl.createEl("input", {
+          attr: { type: "date", value: this.toDate },
+        });
+        this.toInput.addEventListener("change", () => {
+          this.toDate = this.toInput!.value;
+          this.refresh();
+        });
+      });
+
+    // ── Live stats ──
+    this.rangeDaysEl = contentEl.createEl("p", {
+      cls: "trakt-backfill-stat",
+    });
+    this.existingNotesEl = contentEl.createEl("p", {
+      cls: "trakt-backfill-stat",
+    });
+    this.invalidEl = contentEl.createEl("p", {
+      cls: "trakt-backfill-invalid",
+    });
+
+    // ── Description body ──
+    const body = this.translate("daily.backfill.modal.body");
     for (const para of body.split("\n")) {
       if (para.trim() === "") {
         contentEl.createEl("br");
       } else {
-        contentEl.createEl("p", { text: para });
+        contentEl.createEl("p", { cls: "trakt-backfill-body", text: para });
       }
     }
 
+    // ── Buttons ──
     const btnContainer = contentEl.createDiv({ cls: "trakt-modal-buttons" });
     const cancelBtn = btnContainer.createEl("button", {
       text: this.translate("daily.backfill.modal.cancel"),
     });
     cancelBtn.onclick = () => this.close();
 
-    const confirmBtn = btnContainer.createEl("button", {
+    this.confirmBtn = btnContainer.createEl("button", {
       text: this.translate("daily.backfill.modal.confirm"),
       cls: "mod-cta",
     });
-    confirmBtn.onclick = async () => {
+    this.confirmBtn.onclick = async () => {
+      if (this.fromDate > this.toDate) return;
+      const from = this.fromDate;
+      const to = this.toDate;
       this.close();
-      await this.onConfirm();
+      await this.onConfirm(from, to);
     };
+
+    this.refresh();
+  }
+
+  /** Recompute live stats whenever a date input or preset changes. */
+  private refresh(): void {
+    const valid = this.fromDate && this.toDate && this.fromDate <= this.toDate;
+
+    if (!valid) {
+      if (this.rangeDaysEl) this.rangeDaysEl.setText("");
+      if (this.existingNotesEl) this.existingNotesEl.setText("");
+      if (this.invalidEl) {
+        this.invalidEl.setText(this.translate("daily.backfill.modal.invalid"));
+        this.invalidEl.show();
+      }
+      if (this.confirmBtn) this.confirmBtn.disabled = true;
+      return;
+    }
+
+    if (this.invalidEl) {
+      this.invalidEl.setText("");
+      this.invalidEl.hide();
+    }
+
+    const days = daysBetweenISO(this.fromDate, this.toDate) + 1;
+    const existing = countExistingDailyNotes(
+      this.app,
+      this.settings,
+      this.fromDate,
+      this.toDate,
+    );
+
+    if (this.rangeDaysEl) {
+      this.rangeDaysEl.setText(
+        this.translate("daily.backfill.modal.rangeDays", { days }),
+      );
+    }
+    if (this.existingNotesEl) {
+      this.existingNotesEl.setText(
+        this.translate("daily.backfill.modal.existingNotes", { count: existing }),
+      );
+    }
+    if (this.confirmBtn) this.confirmBtn.disabled = false;
   }
 
   onClose(): void {
     this.contentEl.empty();
   }
+}
+
+/**
+ * Count how many Daily Note files in the configured folder exist for
+ * dates in [from, to]. Used for the modal's live "Existing Daily Notes
+ * in range: M" stat. Synchronous (vault.getAbstractFileByPath is sync)
+ * so the count updates with zero lag on every date-input change.
+ */
+function countExistingDailyNotes(
+  app: App,
+  settings: TraktrSettings,
+  from: string,
+  to: string,
+): number {
+  const moment = (window as unknown as {
+    moment: (i: string, f: string) => { format(o: string): string };
+  }).moment;
+  let count = 0;
+  let cursor = from;
+  while (cursor <= to) {
+    const path = computeDailyNotePath(
+      cursor,
+      settings.dailyNotesFolder,
+      settings.dailyNotesFilenameFormat,
+      moment,
+    );
+    if (app.vault.getAbstractFileByPath(path)) count++;
+    cursor = addDaysISO(cursor, 1);
+  }
+  return count;
 }
 
 /**

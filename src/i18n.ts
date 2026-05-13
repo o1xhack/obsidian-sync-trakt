@@ -182,22 +182,54 @@ const STRINGS = {
   },
 
   "daily.backfill.heading": { en: "Manual backfill", "zh-CN": "手动回溯" },
-  "daily.backfill.days.name": { en: "Days to backfill", "zh-CN": "回溯天数" },
-  "daily.backfill.days.desc": {
-    en: "How many past days to fill when you click the button below. Any positive integer (capped at 3650 = 10 years). Days without an existing Daily Note are silently skipped — no files are created, no Trakt / TMDB API calls are made.",
-    "zh-CN": "点击下方按钮时回溯多少天。任意正整数（上限 3650，即 10 年）。该天没有 Daily Note 文件就直接跳过 —— 不会新建文件、也不调用 Trakt / TMDB API。",
+  // [1.0.0] Slider + N-days input replaced with a date-range modal.
+  // Settings now collapses to a single button that opens the modal.
+  "daily.backfill.button.desc": {
+    en: "Pick a start and end date, then run a one-shot backfill. Skips dates without an existing Daily Note. No Trakt / TMDB API calls are made — all watch history is already local.",
+    "zh-CN": "选起始和结束日期，跑一次回溯。该天没有 Daily Note 文件就直接跳过。不会调用 Trakt / TMDB API —— 所有观看历史都已经在本地了。",
   },
-  "daily.backfill.button": {
-    en: "Backfill last {days} days",
-    "zh-CN": "回溯最近 {days} 天",
-  },
+  "daily.backfill.button": { en: "Backfill…", "zh-CN": "手动回溯…" },
   "daily.backfill.modal.title": {
-    en: "Backfill last {days} days",
-    "zh-CN": "回溯最近 {days} 天",
+    en: "Backfill Daily Notes",
+    "zh-CN": "回溯 Daily Notes",
+  },
+  "daily.backfill.modal.presetLabel": {
+    en: "Quick select",
+    "zh-CN": "快捷选择",
+  },
+  "daily.backfill.modal.preset.last7": {
+    en: "Last 7 days",
+    "zh-CN": "最近 7 天",
+  },
+  "daily.backfill.modal.preset.last30": {
+    en: "Last 30 days",
+    "zh-CN": "最近 30 天",
+  },
+  "daily.backfill.modal.preset.thisMonth": {
+    en: "This month",
+    "zh-CN": "本月",
+  },
+  "daily.backfill.modal.preset.lastMonth": {
+    en: "Last month",
+    "zh-CN": "上月",
+  },
+  "daily.backfill.modal.startDate": { en: "Start date", "zh-CN": "起始日期" },
+  "daily.backfill.modal.endDate": { en: "End date", "zh-CN": "结束日期" },
+  "daily.backfill.modal.rangeDays": {
+    en: "Range: {days} day(s)",
+    "zh-CN": "区间：{days} 天",
+  },
+  "daily.backfill.modal.existingNotes": {
+    en: "Existing Daily Notes in range: {count}",
+    "zh-CN": "其中存在的 Daily Note：{count} 篇",
+  },
+  "daily.backfill.modal.invalid": {
+    en: "Start date must be on or before end date.",
+    "zh-CN": "起始日期必须早于或等于结束日期。",
   },
   "daily.backfill.modal.body": {
-    en: "Each day from {days} days ago through today:\n\n• No Daily Note → skip\n• Empty marker region (e.g. from your template) → fill it\n• Marker region already has Trakt content → skip (kept as-is)\n• No markers → append a fresh marker region at the END of the file\n\nContent outside our marker region is NEVER modified.",
-    "zh-CN": "从 {days} 天前到今天的每一天：\n\n• 没有 Daily Note → 跳过\n• 空的 marker 区间（例如来自模板） → 填入当天事件\n• marker 区间已有 Trakt 内容 → 跳过（保持原样）\n• 没有 marker → 在文件**末尾**追加 marker 区间和当天事件\n\nmarker 区间之外的内容**永远不会**被修改。",
+    en: "For each day in the range:\n• No Daily Note → skip\n• Empty marker region (e.g. from your template) → fill it\n• Marker region already has Trakt content → skip (kept as-is)\n• No markers → append a fresh marker region at the END of the file\n\nContent outside our marker region is NEVER modified.",
+    "zh-CN": "对区间内每一天：\n• 没有 Daily Note → 跳过\n• 空的 marker 区间（例如来自模板）→ 填入当天事件\n• marker 区间已有 Trakt 内容 → 跳过（保持原样）\n• 没有 marker → 在文件**末尾**追加 marker 区间和当天事件\n\nmarker 区间之外的内容**永远不会**被修改。",
   },
   "daily.backfill.modal.confirm": { en: "Backfill", "zh-CN": "开始回溯" },
   "daily.backfill.modal.cancel": { en: "Cancel", "zh-CN": "取消" },
