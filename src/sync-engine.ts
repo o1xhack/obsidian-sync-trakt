@@ -457,11 +457,65 @@ async function scanExistingNotes(
     const traktId = parseInt(frontmatter[idKey], 10);
     const type = frontmatter[typeKey];
     if (!isNaN(traktId) && (type === "movie" || type === "show")) {
-      map.set(itemKey(type, traktId), child);
+      const key = itemKey(type, traktId);
+      const existing = map.get(key);
+      if (!existing || preferIdentityFile(child, existing, traktId)) {
+        map.set(key, child);
+      }
     }
   }
 
   return map;
+}
+
+function preferIdentityFile(candidate: TFile, current: TFile, traktId: number): boolean {
+  // If a prior race already created "Title [id] (year).md" beside the
+  // original "Title (year).md", keep updating the original path. The bracketed
+  // form is only a collision fallback, not a better identity match.
+  const idToken = `[${traktId}]`;
+  const candidateHasIdToken = candidate.basename.includes(idToken);
+  const currentHasIdToken = current.basename.includes(idToken);
+  if (candidateHasIdToken !== currentHasIdToken) {
+    return !candidateHasIdToken;
+  }
+  return candidate.path < current.path;
+}
+
+/**
+ * Re-read the current sync folder for a specific identity. This closes a race
+ * with Obsidian Sync: `scanExistingNotes()` runs before TMDB/translation
+ * lookups, so another device can download an already-existing note after that
+ * snapshot but before we start writing. Without this live identity check the
+ * create path sees the filename collision, appends `[trakt_id]`, and creates a
+ * duplicate note with the same frontmatter ID.
+ */
+export async function findExistingNoteByIdentity(
+  app: App,
+  folderPath: string,
+  propertyPrefix: string,
+  type: ItemType,
+  traktId: number,
+): Promise<TFile | null> {
+  const folder = app.vault.getAbstractFileByPath(folderPath);
+  if (!(folder instanceof TFolder)) return null;
+
+  const idKey = `${propertyPrefix}id`;
+  const typeKey = `${propertyPrefix}type`;
+  let match: TFile | null = null;
+
+  for (const child of folder.children) {
+    if (!(child instanceof TFile) || child.extension !== "md") continue;
+    const content = await app.vault.cachedRead(child);
+    const { frontmatter } = parseFrontmatter(content);
+    const noteId = parseInt(frontmatter[idKey], 10);
+    const noteType = frontmatter[typeKey];
+    if (noteId !== traktId || noteType !== type) continue;
+    if (!match || preferIdentityFile(child, match, traktId)) {
+      match = child;
+    }
+  }
+
+  return match;
 }
 
 // ── Sync Engine ──
@@ -963,7 +1017,25 @@ export class SyncEngine {
         );
       }
       try {
-        const existingFile = localNotes.get(key);
+        let existingFile = localNotes.get(key);
+
+        // The initial localNotes snapshot can become stale while we are doing
+        // TMDB / translation work. Before creating, re-check the live folder
+        // by frontmatter identity so a note downloaded by Obsidian Sync during
+        // this sync is updated in place instead of duplicated with `[id]`.
+        if (!existingFile) {
+          const liveFile = await findExistingNoteByIdentity(
+            this.app,
+            folderPath,
+            this.settings.propertyPrefix,
+            item.type,
+            item.ids.trakt,
+          );
+          if (liveFile) {
+            existingFile = liveFile;
+            localNotes.set(key, liveFile);
+          }
+        }
 
         // [1.0.0] Rename if title/template drifted from filename. Runs
         // BEFORE the create/overwrite/diff branching so any downstream

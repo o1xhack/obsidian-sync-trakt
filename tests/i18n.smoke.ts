@@ -49,7 +49,11 @@ import {
   getIncrementalStartAt,
 } from "../src/history-state";
 import { processWithConcurrency } from "../src/utils";
-import { buildFilename, disambiguatedFilename } from "../src/sync-engine";
+import {
+  buildFilename,
+  disambiguatedFilename,
+  findExistingNoteByIdentity,
+} from "../src/sync-engine";
 import {
   localTodayISODate,
   localHHMM,
@@ -3176,6 +3180,64 @@ void (async () => {
       "self-exclusion still respects real collisions: tier-1 fallback",
     );
     assertEq(result2.tier, 1, "self-exclusion: tier === 1 when other file genuinely collides");
+  }
+
+  // ── Test 61b: live identity lookup prevents Obsidian Sync race duplicates ─
+  // The sync engine scans existing notes before TMDB/translation work. On a
+  // second device, Obsidian Sync can download an existing note after that
+  // snapshot. The create path must re-check by frontmatter identity before
+  // creating, otherwise it sees the filename collision and creates
+  // "Title [trakt_id] (year).md" beside the original.
+
+  console.log("\n[61b] findExistingNoteByIdentity — prefers existing same-ID note");
+  {
+    const stub = await import("./stub-obsidian");
+    const folder = new stub.TFolder();
+    folder.path = "Trakt";
+
+    const plain = new stub.TFile() as InstanceType<typeof stub.TFile> & {
+      basename: string;
+    };
+    plain.path = "Trakt/Shrinking (2023).md";
+    plain.name = "Shrinking (2023).md";
+    plain.basename = "Shrinking (2023)";
+    plain.extension = "md";
+
+    const bracketed = new stub.TFile() as InstanceType<typeof stub.TFile> & {
+      basename: string;
+    };
+    bracketed.path = "Trakt/Shrinking [189764] (2023).md";
+    bracketed.name = "Shrinking [189764] (2023).md";
+    bracketed.basename = "Shrinking [189764] (2023)";
+    bracketed.extension = "md";
+
+    folder.children = [bracketed, plain];
+
+    const content = "---\ntrakt_type: show\ntrakt_id: 189764\n---\n";
+    const app = new stub.App() as unknown as {
+      vault: {
+        getAbstractFileByPath: (path: string) => unknown;
+        cachedRead: (file: InstanceType<typeof stub.TFile>) => Promise<string>;
+      };
+    };
+    app.vault = {
+      getAbstractFileByPath: (path: string) => (path === "Trakt" ? folder : null),
+      cachedRead: async () => content,
+    };
+
+    const found = await findExistingNoteByIdentity(
+      app as never,
+      "Trakt",
+      "trakt_",
+      "show",
+      189764,
+    );
+
+    assertEq(
+      found?.path,
+      plain.path,
+      "live identity lookup picks the original path over the bracketed duplicate",
+    );
   }
 
   // ── Test 62: [1.0.0] WhatsNewModal i18n keys present in EN + zh-CN ──
