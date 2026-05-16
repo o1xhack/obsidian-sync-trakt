@@ -766,6 +766,31 @@ const STRINGS = {
     "zh-CN": "开启后，已从所有同步来源移除的条目对应的笔记会被移至回收站。",
   },
 
+  // ── Sync maintenance section ──
+  "syncMaintenance.heading": { en: "Maintenance", "zh-CN": "维护" },
+  "syncMaintenance.dedupe.name": {
+    en: "Deduplicate synced notes",
+    "zh-CN": "去重同步笔记",
+  },
+  "syncMaintenance.dedupe.desc": {
+    en: "Scan the current sync folder, group notes by trakt_type + trakt_id, keep the note that best matches your current filename template, and move duplicate copies to Obsidian trash. No Trakt or TMDB API calls are made.",
+    "zh-CN":
+      "扫描当前同步文件夹，按 trakt_type + trakt_id 分组，保留最符合当前文件名模板的那篇，把重复副本移到 Obsidian 回收站。不会调用 Trakt 或 TMDB API。",
+  },
+  "syncMaintenance.dedupe.button": {
+    en: "Deduplicate",
+    "zh-CN": "去重",
+  },
+  "syncMaintenance.dedupe.running": {
+    en: "Deduplicating…",
+    "zh-CN": "去重中…",
+  },
+  "syncMaintenance.dedupe.done": {
+    en: "Sync Trakt: dedupe scanned duplicate groups {groups}, moved {trashed} note(s) to trash, renamed {renamed}, failed {failed}.",
+    "zh-CN":
+      "Sync Trakt：去重扫描到 {groups} 组重复，移入回收站 {trashed} 篇，重命名 {renamed} 篇，失败 {failed}。",
+  },
+
   // ── Reset section ──
   "reset.heading": { en: "Reset", "zh-CN": "重置" },
   "reset.button.name": {

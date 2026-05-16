@@ -51,6 +51,7 @@ import {
 import { processWithConcurrency } from "../src/utils";
 import {
   buildFilename,
+  dedupeDuplicateNotes,
   disambiguatedFilename,
   findMatchingIdentityFile,
 } from "../src/sync-engine";
@@ -2663,6 +2664,7 @@ void (async () => {
       "authModal.success",
       "tmdb.cache.clear.notice",
       "history.state.clear.notice",
+      "syncMaintenance.dedupe.done",
       "reset.notice",
       "daily.backfill.done",
       "daily.catchUpDone.todayOnly",
@@ -3238,6 +3240,128 @@ void (async () => {
       reads.sort(),
       [bracketed.path, plain.path].sort(),
       "collision identity lookup reads only the collided candidate files",
+    );
+  }
+
+  // ── Test 61c: dedupeDuplicateNotes respects identity + current template ─
+  // Dedupe is a local maintenance action. It must group by trakt_type +
+  // trakt_id, not by title, and it must choose the kept file according to the
+  // user's CURRENT filename template instead of hardcoding the default
+  // "{{title}} ({{year}})" convention.
+
+  console.log("\n[61c] dedupeDuplicateNotes — identity groups + dynamic template");
+  {
+    const stub = await import("./stub-obsidian");
+
+    const makeFile = (filePath: string) => {
+      const file = new stub.TFile() as InstanceType<typeof stub.TFile> & {
+        basename: string;
+      };
+      file.path = filePath;
+      file.name = filePath.split("/").pop() ?? filePath;
+      file.basename = file.name.replace(/\.md$/, "");
+      file.extension = "md";
+      return file;
+    };
+
+    const makeApp = (
+      files: Array<InstanceType<typeof stub.TFile>>,
+      contents: Record<string, string>,
+    ) => {
+      const folder = new stub.TFolder();
+      folder.path = "Trakt";
+      folder.children = [...files];
+      const byPath = new Map<string, unknown>(
+        files.map((file) => [file.path, file]),
+      );
+      const trashed: string[] = [];
+      const renamed: string[] = [];
+      const app = new stub.App() as unknown as {
+        vault: {
+          getAbstractFileByPath: (path: string) => unknown;
+          cachedRead: (file: InstanceType<typeof stub.TFile>) => Promise<string>;
+        };
+        fileManager: {
+          trashFile: (file: InstanceType<typeof stub.TFile>) => Promise<void>;
+          renameFile: (
+            file: InstanceType<typeof stub.TFile>,
+            newPath: string,
+          ) => Promise<void>;
+        };
+      };
+      app.vault = {
+        getAbstractFileByPath: (lookupPath) =>
+          lookupPath === "Trakt" ? folder : byPath.get(lookupPath) ?? null,
+        cachedRead: async (file) => contents[file.path] ?? "",
+      };
+      app.fileManager = {
+        trashFile: async (file) => {
+          trashed.push(file.path);
+          byPath.delete(file.path);
+          folder.children = folder.children.filter((child) => child !== file);
+        },
+        renameFile: async (file, newPath) => {
+          renamed.push(`${file.path} -> ${newPath}`);
+          byPath.delete(file.path);
+          file.path = newPath;
+          file.name = newPath.split("/").pop() ?? newPath;
+          (file as typeof file & { basename: string }).basename =
+            file.name.replace(/\.md$/, "");
+          byPath.set(file.path, file);
+        },
+      };
+      return { app, trashed, renamed };
+    };
+
+    const fm = (
+      type: "movie" | "show",
+      id: number,
+      title: string,
+      year: number,
+      syncedAt: string,
+    ) =>
+      `---\ntrakt_type: ${type}\ntrakt_id: ${id}\ntrakt_title: ${title}\ntrakt_original_title: ${title}\ntrakt_year: ${year}\ntrakt_synced_at: "${syncedAt}"\n---\n`;
+
+    const plain = makeFile("Trakt/Shrinking (2023).md");
+    const bracketed = makeFile("Trakt/Shrinking [189764] (2023).md");
+    const otherId = makeFile("Trakt/Shrinking [999] (2023).md");
+    const defaultApp = makeApp([plain, bracketed, otherId], {
+      [plain.path]: fm("show", 189764, "Shrinking", 2023, "2026-05-15T00:00:00Z"),
+      [bracketed.path]: fm("show", 189764, "Shrinking", 2023, "2026-05-16T00:00:00Z"),
+      [otherId.path]: fm("show", 999, "Shrinking", 2023, "2026-05-16T00:00:00Z"),
+    });
+    const defaultResult = await dedupeDuplicateNotes(
+      defaultApp.app as never,
+      "Trakt",
+      "{{title}} ({{year}})",
+      "trakt_",
+    );
+    assertEq(defaultResult.duplicateGroups, 1, "default template: one duplicate identity group");
+    assertEq(defaultResult.movedToTrash, 1, "default template: one duplicate copy trashed");
+    assertEq(
+      defaultApp.trashed,
+      [bracketed.path],
+      "default template keeps natural filename and does not remove different-id collision",
+    );
+    assertEq(defaultApp.renamed, [], "default template: kept file already has desired name");
+
+    const customPlain = makeFile("Trakt/Shrinking (2023).md");
+    const customBracketed = makeFile("Trakt/Shrinking [189764] (2023).md");
+    const customApp = makeApp([customPlain, customBracketed], {
+      [customPlain.path]: fm("show", 189764, "Shrinking", 2023, "2026-05-15T00:00:00Z"),
+      [customBracketed.path]: fm("show", 189764, "Shrinking", 2023, "2026-05-16T00:00:00Z"),
+    });
+    const customResult = await dedupeDuplicateNotes(
+      customApp.app as never,
+      "Trakt",
+      "{{title}} [{{trakt_id}}] ({{year}})",
+      "trakt_",
+    );
+    assertEq(customResult.duplicateGroups, 1, "custom template: one duplicate identity group");
+    assertEq(
+      customApp.trashed,
+      [customPlain.path],
+      "custom template keeps the filename that matches the current template",
     );
   }
 

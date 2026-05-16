@@ -348,42 +348,14 @@ export async function renameAllNotes(
 
   let renamed = 0;
   let scanned = 0;
-  const idKey = `${propertyPrefix}id`;
-  const typeKey = `${propertyPrefix}type`;
-  const titleKey = `${propertyPrefix}title`;
-  const originalTitleKey = `${propertyPrefix}original_title`;
-  const yearKey = `${propertyPrefix}year`;
 
   for (const child of folder.children) {
     if (!(child instanceof TFile) || child.extension !== "md") continue;
     const content = await app.vault.cachedRead(child);
     const { frontmatter } = parseFrontmatter(content);
-    const traktId = parseInt(frontmatter[idKey], 10);
-    const type = frontmatter[typeKey];
-    if (isNaN(traktId)) continue;
-    if (type !== "movie" && type !== "show") continue;
+    const synthItem = itemFromFrontmatter(frontmatter, propertyPrefix);
+    if (!synthItem) continue;
     scanned++;
-
-    // Build a minimal NormalizedItem just for filename rendering.
-    // Properties not consulted by the template are left as empty defaults.
-    const synthItem = {
-      type,
-      title: frontmatter[titleKey] || "",
-      originalTitle: frontmatter[originalTitleKey] || "",
-      year: parseInt(frontmatter[yearKey], 10) || 0,
-      ids: { trakt: traktId, slug: "", imdb: "", tmdb: 0 },
-      overview: "",
-      genres: [],
-      runtime: 0,
-      rating: 0,
-      votes: 0,
-      certification: "",
-      country: "",
-      language: "",
-      status: "",
-      originalOverview: "",
-      originalGenres: [],
-    } as unknown as NormalizedItem;
 
     const didRename = await maybeRenameExistingFile(
       app,
@@ -396,6 +368,189 @@ export async function renameAllNotes(
   }
 
   return { renamed, scanned };
+}
+
+function itemFromFrontmatter(
+  frontmatter: Record<string, string>,
+  propertyPrefix: string,
+): NormalizedItem | null {
+  const idKey = `${propertyPrefix}id`;
+  const typeKey = `${propertyPrefix}type`;
+  const titleKey = `${propertyPrefix}title`;
+  const originalTitleKey = `${propertyPrefix}original_title`;
+  const yearKey = `${propertyPrefix}year`;
+  const slugKey = `${propertyPrefix}slug`;
+  const imdbKey = `${propertyPrefix}imdb_id`;
+  const tmdbKey = `${propertyPrefix}tmdb_id`;
+
+  const traktId = parseInt(frontmatter[idKey], 10);
+  const type = frontmatter[typeKey];
+  if (isNaN(traktId)) return null;
+  if (type !== "movie" && type !== "show") return null;
+
+  const tmdbId = parseInt(frontmatter[tmdbKey], 10);
+
+  // Build a minimal NormalizedItem just for filename rendering.
+  // Properties not consulted by the template are left as empty defaults.
+  return {
+    type,
+    title: frontmatter[titleKey] || "",
+    originalTitle: frontmatter[originalTitleKey] || "",
+    year: parseInt(frontmatter[yearKey], 10) || 0,
+    ids: {
+      trakt: traktId,
+      slug: frontmatter[slugKey] || "",
+      imdb: frontmatter[imdbKey] || "",
+      tmdb: isNaN(tmdbId) ? 0 : tmdbId,
+    },
+    overview: "",
+    genres: [],
+    runtime: 0,
+    rating: 0,
+    votes: 0,
+    certification: "",
+    country: "",
+    language: "",
+    status: "",
+    originalOverview: "",
+    originalGenres: [],
+  } as unknown as NormalizedItem;
+}
+
+type NoteIdentityRecord = {
+  file: TFile;
+  item: NormalizedItem;
+  syncedAtMs: number;
+};
+
+export type DedupeDuplicateNotesResult = {
+  scanned: number;
+  duplicateGroups: number;
+  movedToTrash: number;
+  renamed: number;
+  failed: number;
+  errors: string[];
+};
+
+function syncedAtMs(frontmatter: Record<string, string>, propertyPrefix: string): number {
+  const raw = frontmatter[`${propertyPrefix}synced_at`];
+  const parsed = raw ? Date.parse(raw) : NaN;
+  return isNaN(parsed) ? 0 : parsed;
+}
+
+function preferredDuplicateKeep(
+  records: NoteIdentityRecord[],
+  folderPath: string,
+  template: string,
+  app: App,
+): NoteIdentityRecord {
+  const groupPaths = new Set(records.map((record) => record.file.path));
+  const scored = records.map((record) => {
+    const { filename } = disambiguatedFilename(
+      record.item,
+      template,
+      (candidate) => {
+        const candidatePath = normalizePath(`${folderPath}/${candidate}.md`);
+        const found = app.vault.getAbstractFileByPath(candidatePath);
+        if (found instanceof TFile && groupPaths.has(found.path)) return false;
+        return !!found;
+      },
+    );
+    const desiredPath = normalizePath(`${folderPath}/${filename}.md`);
+    const idToken = `[${record.item.ids.trakt}]`;
+    return {
+      record,
+      matchesCurrentTemplate: record.file.path === desiredPath,
+      hasFallbackIdToken: record.file.basename.includes(idToken),
+    };
+  });
+
+  scored.sort((a, b) => {
+    if (a.matchesCurrentTemplate !== b.matchesCurrentTemplate) {
+      return a.matchesCurrentTemplate ? -1 : 1;
+    }
+    if (a.hasFallbackIdToken !== b.hasFallbackIdToken) {
+      return a.hasFallbackIdToken ? 1 : -1;
+    }
+    if (a.record.syncedAtMs !== b.record.syncedAtMs) {
+      return b.record.syncedAtMs - a.record.syncedAtMs;
+    }
+    return a.record.file.path.localeCompare(b.record.file.path);
+  });
+
+  return scored[0].record;
+}
+
+export async function dedupeDuplicateNotes(
+  app: App,
+  folderPath: string,
+  template: string,
+  propertyPrefix: string,
+): Promise<DedupeDuplicateNotesResult> {
+  const result: DedupeDuplicateNotesResult = {
+    scanned: 0,
+    duplicateGroups: 0,
+    movedToTrash: 0,
+    renamed: 0,
+    failed: 0,
+    errors: [],
+  };
+  const folder = app.vault.getAbstractFileByPath(folderPath);
+  if (!(folder instanceof TFolder)) return result;
+
+  const groups = new Map<string, NoteIdentityRecord[]>();
+  for (const child of folder.children) {
+    if (!(child instanceof TFile) || child.extension !== "md") continue;
+    const content = await app.vault.cachedRead(child);
+    const { frontmatter } = parseFrontmatter(content);
+    const item = itemFromFrontmatter(frontmatter, propertyPrefix);
+    if (!item) continue;
+    result.scanned++;
+    const key = itemKey(item.type, item.ids.trakt);
+    const records = groups.get(key) ?? [];
+    records.push({
+      file: child,
+      item,
+      syncedAtMs: syncedAtMs(frontmatter, propertyPrefix),
+    });
+    groups.set(key, records);
+  }
+
+  for (const records of groups.values()) {
+    if (records.length <= 1) continue;
+    result.duplicateGroups++;
+    const keep = preferredDuplicateKeep(records, folderPath, template, app);
+    for (const record of records) {
+      if (record === keep) continue;
+      try {
+        await app.fileManager.trashFile(record.file);
+        result.movedToTrash++;
+      } catch (e) {
+        result.failed++;
+        const msg = `Failed to move duplicate "${record.file.path}" to trash: ${e instanceof Error ? e.message : String(e)}`;
+        result.errors.push(msg);
+        console.error("[Traktr]", msg, e);
+      }
+    }
+
+    try {
+      const renamed = await maybeRenameExistingFile(
+        app,
+        keep.file,
+        keep.item,
+        folderPath,
+        template,
+      );
+      if (renamed) result.renamed++;
+    } catch (e) {
+      result.failed++;
+      const msg = `Failed to rename kept duplicate "${keep.file.path}": ${e instanceof Error ? e.message : String(e)}`;
+      result.errors.push(msg);
+      console.error("[Traktr]", msg, e);
+    }
+  }
+
+  return result;
 }
 
 export function disambiguatedFilename(

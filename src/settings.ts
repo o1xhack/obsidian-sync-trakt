@@ -8,7 +8,7 @@ import {
 } from "obsidian";
 import type TraktrPlugin from "./main";
 import { getTranslator, type UiLanguage } from "./i18n";
-import { renameAllNotes } from "./sync-engine";
+import { dedupeDuplicateNotes, renameAllNotes } from "./sync-engine";
 import type { ReleaseHighlight, ReleaseLogEntry } from "./release-log";
 import {
   EMPTY_HISTORY_STATE,
@@ -41,7 +41,7 @@ export const POSTER_SIZES = [
 
 export type PosterSize = (typeof POSTER_SIZES)[number];
 
-export const BUILD_CREATED_AT = "2026-05-16 15:35:32 PDT";
+export const BUILD_CREATED_AT = "2026-05-16 15:56:30 PDT";
 
 /**
  * [0.5.0] Settings that can be marked as "device-local" per spec 0003.
@@ -2250,6 +2250,45 @@ export class TraktrSettingTab extends PluginSettingTab {
           .onChange(async (value) => {
             this.plugin.settings.deleteRemovedItems = value;
             await this.plugin.saveSettings();
+          }),
+      );
+
+    // ── Maintenance ──
+    new Setting(containerEl).setName(t("syncMaintenance.heading")).setHeading();
+
+    new Setting(containerEl)
+      .setName(t("syncMaintenance.dedupe.name"))
+      .setDesc(t("syncMaintenance.dedupe.desc"))
+      .addButton((btn) =>
+        btn
+          .setButtonText(t("syncMaintenance.dedupe.button"))
+          .setWarning()
+          .onClick(async () => {
+            const tNow = getTranslator(this.plugin.settings.uiLanguage);
+            btn.setButtonText(tNow("syncMaintenance.dedupe.running"));
+            btn.setDisabled(true);
+            try {
+              const result = await dedupeDuplicateNotes(
+                this.plugin.app,
+                normalizePath(this.plugin.settings.folder),
+                this.plugin.settings.filenameTemplate,
+                this.plugin.settings.propertyPrefix,
+              );
+              new Notice(
+                tNow("syncMaintenance.dedupe.done", {
+                  groups: result.duplicateGroups,
+                  trashed: result.movedToTrash,
+                  renamed: result.renamed,
+                  failed: result.failed,
+                }),
+                result.failed > 0 ? 10000 : 6000,
+              );
+              if (result.failed > 0 && result.errors[0]) {
+                new Notice(`${tNow("status.prefix")}${result.errors[0]}`, 10000);
+              }
+            } finally {
+              this.display();
+            }
           }),
       );
 
