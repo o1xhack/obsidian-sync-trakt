@@ -20,6 +20,13 @@
 export interface ReleaseLogEntry {
   version: string;
   isBugfix?: boolean;
+  titleEn?: string;
+  titleZh?: string;
+  en: string;
+  zh: string;
+}
+
+export interface ReleaseHighlight {
   en: string;
   zh: string;
 }
@@ -36,8 +43,10 @@ export interface ReleaseLogEntry {
 export const RELEASE_LOG: ReleaseLogEntry[] = [
   {
     version: "1.1.0",
-    en: "Local runtime cache storage keeps large TMDB and detailed-history caches out of synced data.json.",
-    zh: "本机运行缓存存储：大型 TMDB 与详细观看历史缓存不再写入同步的 data.json。",
+    titleEn: "Local runtime cache storage",
+    titleZh: "本机运行缓存存储",
+    en: "Large TMDB and detailed-watch-history caches now live outside the vault in local runtime storage. Synced data.json stays small, frequent auto-sync no longer rewrites multi-megabyte plugin data, and a synced full-refresh coordinator keeps Mac / Windows / iOS devices from writing stale detailed history.",
+    zh: "大型 TMDB 缓存与详细观看历史缓存现在放在 vault 外的本机运行存储里。同步的 data.json 保持很小，频繁自动同步不会再重写数 MB 的插件数据；同时通过一个同步的全量刷新协调字段，避免 Mac / Windows / iOS 设备用过期详细历史写回笔记。",
   },
   {
     version: "1.0.1",
@@ -100,6 +109,29 @@ export const RELEASE_LOG: ReleaseLogEntry[] = [
     zh: "设置页 tab 化 + 11 种内置笔记模板语言。",
   },
 ];
+
+export const RECENT_UPDATE_HIGHLIGHTS: ReleaseHighlight[] = [
+  {
+    en: "Automatic filename rename keeps localized media notes aligned when metadata language changes.",
+    zh: "切换元数据语言后，媒体笔记文件名可自动跟随重命名。",
+  },
+  {
+    en: "Metadata fallback lets you use a strict primary language with a secondary fallback.",
+    zh: "元数据语言支持严格主语言 + 次选回退语言。",
+  },
+  {
+    en: "Daily Notes integration can write watched / watchlist / favorite / rating events into daily notes.",
+    zh: "Daily Notes 集成可把观看、想看、收藏、评分事件写入日记。",
+  },
+  {
+    en: "Tabbed settings and bundled note templates make the plugin easier to use across languages.",
+    zh: "设置页已 tab 化，并内置多语言笔记模板，跨语言使用更清晰。",
+  },
+];
+
+export function entryForVersion(version: string): ReleaseLogEntry | undefined {
+  return RELEASE_LOG.find((e) => e.version === version);
+}
 
 /**
  * Strict-greater-than comparator for `x.y.z` semver strings.

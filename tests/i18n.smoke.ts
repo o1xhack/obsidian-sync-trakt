@@ -97,6 +97,7 @@ import {
 import { getTranslator, t } from "../src/i18n";
 import type { NormalizedItem } from "../src/types";
 import {
+  RECENT_UPDATE_HIGHLIGHTS,
   RELEASE_LOG,
   entriesNewerThan,
   isVersionNewer,
@@ -3186,10 +3187,12 @@ void (async () => {
   console.log("\n[62] What's-new modal chrome i18n keys — EN + zh-CN");
   {
     const keys = [
-      "whatsNew.title",
-      "whatsNew.bugfix",
-      "whatsNew.footer",
-      "whatsNew.github",
+    "whatsNew.title",
+    "whatsNew.current",
+    "whatsNew.recent",
+    "whatsNew.bugfix",
+    "whatsNew.footer",
+    "whatsNew.github",
       "whatsNew.dismiss",
     ] as const;
     for (const k of keys) {
@@ -3246,6 +3249,24 @@ void (async () => {
       assertTrue(
         isVersionNewer(RELEASE_LOG[i - 1].version, RELEASE_LOG[i].version),
         `entry ${i - 1} ('${RELEASE_LOG[i - 1].version}') strictly newer than entry ${i} ('${RELEASE_LOG[i].version}')`,
+      );
+    }
+  }
+
+  console.log("\n[63b] recent update highlights are versionless");
+  {
+    assertTrue(
+      RECENT_UPDATE_HIGHLIGHTS.length >= 3,
+      "recent highlights include several memorable feature bullets",
+    );
+    for (const h of RECENT_UPDATE_HIGHLIGHTS) {
+      assertTrue(
+        !/\b\d+\.\d+\.\d+\b/.test(h.en),
+        `en highlight has no version number: ${h.en}`,
+      );
+      assertTrue(
+        !/\b\d+\.\d+\.\d+\b/.test(h.zh),
+        `zh highlight has no version number: ${h.zh}`,
       );
     }
   }

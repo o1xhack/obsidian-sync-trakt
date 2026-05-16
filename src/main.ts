@@ -10,7 +10,11 @@ import {
   type LocalEligibleKey,
   type TraktrSettings,
 } from "./settings";
-import { entriesNewerThan, isVersionNewer } from "./release-log";
+import {
+  RECENT_UPDATE_HIGHLIGHTS,
+  entryForVersion,
+  isVersionNewer,
+} from "./release-log";
 import { AuthModal } from "./trakt-auth";
 import { SyncEngine } from "./sync-engine";
 import { getTranslator, type UiLanguage } from "./i18n";
@@ -279,21 +283,22 @@ export default class TraktrPlugin extends Plugin {
       // Defer 1.5s to let Obsidian finish startup — the modal opens
       // on top of an idle workspace, not mid-load.
       window.setTimeout(() => {
-        this.showWhatsNewModal(currentVersion, lastShown);
+        this.showWhatsNewModal(currentVersion, true);
       }, 1500);
     }
   }
 
   /**
-   * [1.0.0] Render the What's-new modal with entries strictly newer
-   * than `sinceVersion`. After dismissal, store `currentVersion` so
-   * the modal won't re-fire until the NEXT release. If the filtered
-   * entry list happens to be empty (e.g. an unlogged patch bump),
-   * silently advance the stored version without opening the modal.
+   * [1.1.0] Render the current release note plus a versionless recent
+   * highlights recap. Startup calls mark the version dismissed; Settings
+   * calls are user-initiated and only re-open the modal.
    */
-  private showWhatsNewModal(currentVersion: string, sinceVersion: string): void {
-    const entries = entriesNewerThan(sinceVersion);
-    if (entries.length === 0) {
+  private showWhatsNewModal(
+    currentVersion: string,
+    markDismissed: boolean,
+  ): void {
+    const currentEntry = entryForVersion(currentVersion);
+    if (!currentEntry) {
       this.settings.historyState.lastReleaseNoticeVersion = currentVersion;
       void this.saveSettings();
       return;
@@ -302,13 +307,20 @@ export default class TraktrPlugin extends Plugin {
     new WhatsNewModal(
       this.app,
       tNow,
-      entries,
+      currentEntry,
+      RECENT_UPDATE_HIGHLIGHTS,
       this.settings.uiLanguage,
       async () => {
-        this.settings.historyState.lastReleaseNoticeVersion = currentVersion;
-        await this.saveSettings();
+        if (markDismissed) {
+          this.settings.historyState.lastReleaseNoticeVersion = currentVersion;
+          await this.saveSettings();
+        }
       },
     ).open();
+  }
+
+  openWhatsNewModalFromSettings(): void {
+    this.showWhatsNewModal(this.manifest.version, false);
   }
 
   /**

@@ -9,7 +9,7 @@ import {
 import type TraktrPlugin from "./main";
 import { getTranslator, type UiLanguage } from "./i18n";
 import { renameAllNotes } from "./sync-engine";
-import type { ReleaseLogEntry } from "./release-log";
+import type { ReleaseHighlight, ReleaseLogEntry } from "./release-log";
 import {
   EMPTY_HISTORY_STATE,
   type HistoryState,
@@ -40,6 +40,8 @@ export const POSTER_SIZES = [
 ] as const;
 
 export type PosterSize = (typeof POSTER_SIZES)[number];
+
+export const BUILD_CREATED_AT = "2026-05-16 15:07:16 PDT";
 
 /**
  * [0.5.0] Settings that can be marked as "device-local" per spec 0003.
@@ -1475,7 +1477,13 @@ export class TraktrSettingTab extends PluginSettingTab {
     // time so we never have to remember to bump it here on release.
     new Setting(containerEl)
       .setName(t("plugin.version.name"))
-      .setDesc(this.plugin.manifest.version);
+      .setDesc(t("plugin.version.buildDate", { date: BUILD_CREATED_AT }))
+      .addButton((btn) =>
+        btn
+          .setButtonText(this.plugin.manifest.version)
+          .setTooltip(t("plugin.version.openWhatsNew"))
+          .onClick(() => this.plugin.openWhatsNewModalFromSettings()),
+      );
 
     // ── Authentication ──
     new Setting(containerEl).setName(t("auth.heading")).setHeading();
@@ -2529,20 +2537,23 @@ function countExistingDailyNotes(
  */
 export class WhatsNewModal extends Modal {
   private translate: ReturnType<typeof getTranslator>;
-  private entries: ReleaseLogEntry[];
+  private currentEntry: ReleaseLogEntry;
+  private highlights: ReleaseHighlight[];
   private uiLanguage: UiLanguage;
   private onDismiss: () => Promise<void>;
 
   constructor(
     app: App,
     translate: ReturnType<typeof getTranslator>,
-    entries: ReleaseLogEntry[],
+    currentEntry: ReleaseLogEntry,
+    highlights: ReleaseHighlight[],
     uiLanguage: UiLanguage,
     onDismiss: () => Promise<void>,
   ) {
     super(app);
     this.translate = translate;
-    this.entries = entries;
+    this.currentEntry = currentEntry;
+    this.highlights = highlights;
     this.uiLanguage = uiLanguage;
     this.onDismiss = onDismiss;
   }
@@ -2551,15 +2562,31 @@ export class WhatsNewModal extends Modal {
     const { contentEl, titleEl } = this;
     titleEl.setText(this.translate("whatsNew.title"));
 
+    contentEl.createEl("h3", {
+      text: `${this.currentEntry.version} ${this.translate("whatsNew.current")}`,
+    });
+    const currentTitle =
+      this.uiLanguage === "zh-CN"
+        ? this.currentEntry.titleZh
+        : this.currentEntry.titleEn;
+    if (currentTitle) {
+      contentEl.createEl("p", {
+        cls: "trakt-whatsnew-current-title",
+        text: currentTitle,
+      });
+    }
+    contentEl.createEl("p", {
+      text: this.uiLanguage === "zh-CN"
+        ? this.currentEntry.zh
+        : this.currentEntry.en,
+    });
+
+    contentEl.createEl("h3", { text: this.translate("whatsNew.recent") });
     const list = contentEl.createEl("ul", { cls: "trakt-whatsnew-list" });
-    for (const entry of this.entries) {
-      const li = list.createEl("li");
-      const tag = entry.isBugfix
-        ? ` (${this.translate("whatsNew.bugfix")})`
-        : "";
-      const text = this.uiLanguage === "zh-CN" ? entry.zh : entry.en;
-      li.createEl("strong", { text: entry.version + tag });
-      li.appendText(": " + text);
+    for (const highlight of this.highlights) {
+      list.createEl("li", {
+        text: this.uiLanguage === "zh-CN" ? highlight.zh : highlight.en,
+      });
     }
 
     contentEl.createEl("p", {

@@ -274,6 +274,14 @@ const STRINGS = {
   // is i18n'd, value comes from this.plugin.manifest.version at render
   // time so it never needs manual maintenance across releases.
   "plugin.version.name": { en: "Version", "zh-CN": "版本" },
+  "plugin.version.buildDate": {
+    en: "Build created: {date}",
+    "zh-CN": "Build 创建时间：{date}",
+  },
+  "plugin.version.openWhatsNew": {
+    en: "Open update notes",
+    "zh-CN": "打开更新说明",
+  },
 
   // ── Authentication section ──
   "auth.heading": { en: "Authentication", "zh-CN": "认证" },
@@ -497,6 +505,14 @@ const STRINGS = {
   "whatsNew.title": {
     en: "Sync Trakt — what's new",
     "zh-CN": "Sync Trakt —— 更新说明",
+  },
+  "whatsNew.current": {
+    en: "Main update",
+    "zh-CN": "本次主要更新",
+  },
+  "whatsNew.recent": {
+    en: "Recent highlights",
+    "zh-CN": "近期更新回顾",
   },
   "whatsNew.bugfix": {
     en: "Bug fix",
