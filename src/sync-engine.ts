@@ -939,12 +939,6 @@ export class SyncEngine {
     const folderPath = normalizePath(this.settings.folder);
     await ensureFolder(this.app, folderPath);
 
-    const localNotes = await scanExistingNotes(
-      this.app,
-      folderPath,
-      this.settings.propertyPrefix
-    );
-
     // Fetch poster + (optionally) translation per item from TMDB. We use a
     // bounded concurrency pool (5 in flight) instead of a Promise.all burst:
     //   - lets the status bar show real progress while running
@@ -1004,6 +998,15 @@ export class SyncEngine {
       );
     }
 
+    // Scan immediately before writing. This matters for multi-device vaults:
+    // Obsidian Sync may download existing media notes while the metadata
+    // lookups above are running, and those files must be updated in place.
+    const localNotes = await scanExistingNotes(
+      this.app,
+      folderPath,
+      this.settings.propertyPrefix
+    );
+
     // Create or update notes
     let writeIndex = 0;
     const writeTotal = mergedItems.size;
@@ -1018,41 +1021,6 @@ export class SyncEngine {
       }
       try {
         let existingFile = localNotes.get(key);
-
-        // The initial localNotes snapshot can become stale while we are doing
-        // TMDB / translation work. Before creating, re-check the live folder
-        // by frontmatter identity so a note downloaded by Obsidian Sync during
-        // this sync is updated in place instead of duplicated with `[id]`.
-        if (!existingFile) {
-          const liveFile = await findExistingNoteByIdentity(
-            this.app,
-            folderPath,
-            this.settings.propertyPrefix,
-            item.type,
-            item.ids.trakt,
-          );
-          if (liveFile) {
-            existingFile = liveFile;
-            localNotes.set(key, liveFile);
-          }
-        }
-
-        // [1.0.0] Rename if title/template drifted from filename. Runs
-        // BEFORE the create/overwrite/diff branching so any downstream
-        // path read uses the new filename. fileManager.renameFile mutates
-        // the TFile in place and auto-updates Obsidian internal links.
-        // No-op when the setting is off or the desired filename matches
-        // the current one.
-        if (existingFile && this.settings.autoRenameOnLanguageChange) {
-          const renamed = await maybeRenameExistingFile(
-            this.app,
-            existingFile,
-            item,
-            folderPath,
-            this.settings.filenameTemplate,
-          );
-          if (renamed) result.renamed++;
-        }
 
         if (!existingFile) {
           // CREATE — with two-tier filename disambiguation (spec 0.3.1).
@@ -1071,14 +1039,47 @@ export class SyncEngine {
               ),
           );
           if (tier > 0) {
-            console.warn(
-              `[Traktr] Filename collision for "${item.title}" (${item.type} ${item.ids.trakt}); using tier-${tier} fallback: ${filename}.md`,
+            const liveFile = await findExistingNoteByIdentity(
+              this.app,
+              folderPath,
+              this.settings.propertyPrefix,
+              item.type,
+              item.ids.trakt,
             );
+            if (liveFile) {
+              existingFile = liveFile;
+              localNotes.set(key, liveFile);
+            }
           }
-          const filePath = normalizePath(`${folderPath}/${filename}.md`);
-          await this.app.vault.create(filePath, renderNote(item, this.settings));
-          result.added++;
-        } else if (this.settings.overwriteExisting) {
+          if (!existingFile) {
+            if (tier > 0) {
+              console.warn(
+                `[Traktr] Filename collision for "${item.title}" (${item.type} ${item.ids.trakt}); using tier-${tier} fallback: ${filename}.md`,
+              );
+            }
+            const filePath = normalizePath(`${folderPath}/${filename}.md`);
+            await this.app.vault.create(filePath, renderNote(item, this.settings));
+            result.added++;
+            continue;
+          }
+        }
+
+        // [1.0.0] Rename if title/template drifted from filename. Runs
+        // BEFORE the overwrite/diff branching so any downstream path read
+        // uses the new filename. fileManager.renameFile mutates the TFile
+        // in place and auto-updates Obsidian internal links.
+        if (this.settings.autoRenameOnLanguageChange) {
+          const renamed = await maybeRenameExistingFile(
+            this.app,
+            existingFile,
+            item,
+            folderPath,
+            this.settings.filenameTemplate,
+          );
+          if (renamed) result.renamed++;
+        }
+
+        if (this.settings.overwriteExisting) {
           // Full-overwrite mode: documented to always rewrite. Diff path
           // bypassed by user choice.
           await this.app.vault.process(existingFile, () =>
