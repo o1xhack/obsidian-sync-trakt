@@ -7,6 +7,47 @@ plugin is submitted to Obsidian's official Community Plugins directory.
 
 For the full design rationale behind major changes, see [`specs/`](specs/).
 
+## 1.2.0 — 2026-05-17
+
+**Daily Notes-only auto-sync.** Daily Notes can now refresh on their own
+timer without running the full media-note reconciliation pipeline.
+
+### Added
+
+- A separate **Daily Notes auto-sync** toggle and interval in the Daily
+  Notes settings tab. Both settings are device-local by default.
+- `SyncEngine.syncDailyNotesData()`, a lightweight data-refresh path that
+  shares full sync's Trakt source fetches, detailed-history refresh,
+  token refresh, TMDB / Trakt metadata localization, runtime-cache save,
+  and shared sync lock, but skips media-note create/update/delete/rename.
+- Spec [0011](specs/0011-daily-notes-auto-sync.md), documenting the API
+  research, multi-device model, timer interactions, scenario matrix, and
+  rejected alternatives.
+- Smoke coverage for the new settings, i18n labels, shared lock behavior,
+  and the multi-device detailed-history full-refresh coordinator.
+
+### Changed
+
+- The command **Sync to daily notes (today only)** now refreshes Trakt
+  source data before rendering today's Daily Note. It no longer depends
+  on the previous in-memory `lastMergedItems` snapshot after app restart.
+- Trakt auth success, disconnect, and visibility-triggered settings
+  reloads now reconfigure both the full auto-sync timer and the Daily
+  Notes-only timer.
+- Architecture, manual, and README docs now explain the split between
+  vault-synced settings, local runtime caches, full auto-sync, and
+  Daily Notes-only auto-sync.
+
+### Compatibility
+
+- Existing behavior is unchanged unless the user explicitly enables
+  Daily Notes-only auto-sync. Full sync still updates Daily Notes at the
+  end when Daily Notes integration is enabled.
+- The Daily-only path keeps multi-device safety by using the same
+  `SyncEngine.syncing` lock and the same 1.1.x
+  `lastAuthoritativeFullRefreshAt` coordinator for local runtime history
+  caches.
+
 ## 1.1.2 — 2026-05-17
 
 **TMDB cache invalidation bugfix.** Users who already updated to 1.1.1

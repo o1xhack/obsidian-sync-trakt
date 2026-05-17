@@ -51,6 +51,7 @@ import {
 } from "../src/history-state";
 import { processWithConcurrency } from "../src/utils";
 import {
+  SyncEngine,
   buildFilename,
   dedupeDuplicateNotes,
   disambiguatedFilename,
@@ -632,6 +633,16 @@ console.log("\n[10] DEFAULT_SETTINGS still produces English UI + EN templates");
     DEFAULT_SETTINGS.customTemplateLanguage,
     "",
     "customTemplateLanguage default is ''",
+  );
+  assertEq(
+    DEFAULT_SETTINGS.dailyNotesAutoSyncEnabled,
+    false,
+    "Daily Notes auto-sync defaults off",
+  );
+  assertEq(
+    DEFAULT_SETTINGS.dailyNotesAutoSyncIntervalMinutes,
+    60,
+    "Daily Notes auto-sync interval defaults to 60 minutes",
   );
   assertEq(
     DEFAULT_SETTINGS.movieNoteTemplate,
@@ -2134,10 +2145,12 @@ void (async () => {
       "syncOnStartup",
       "autoSyncEnabled",
       "autoSyncIntervalMinutes",
+      "dailyNotesAutoSyncEnabled",
+      "dailyNotesAutoSyncIntervalMinutes",
       "uiLanguage",
     ]);
     const actual = new Set<string>(LOCAL_ELIGIBLE_KEYS);
-    assertEq(actual.size, expected.size, "list has 4 entries");
+    assertEq(actual.size, expected.size, "list has 6 entries");
     for (const k of expected) {
       assertTrue(actual.has(k), `LOCAL_ELIGIBLE_KEYS includes '${k}'`);
     }
@@ -2180,6 +2193,14 @@ void (async () => {
       defaultLocal.has("autoSyncIntervalMinutes"),
       "autoSyncIntervalMinutes defaults to LOCAL",
     );
+    assertTrue(
+      defaultLocal.has("dailyNotesAutoSyncEnabled"),
+      "dailyNotesAutoSyncEnabled defaults to LOCAL",
+    );
+    assertTrue(
+      defaultLocal.has("dailyNotesAutoSyncIntervalMinutes"),
+      "dailyNotesAutoSyncIntervalMinutes defaults to LOCAL",
+    );
   }
 
   console.log("\n[44] localStorage key namespacing is consistent");
@@ -2210,6 +2231,31 @@ void (async () => {
       enSynced !== enLocal && zhSynced !== zhLocal,
       "synced and local tooltips actually differ in each language",
     );
+  }
+
+  console.log("\n[44b] Daily Notes auto-sync i18n keys resolve");
+  {
+    const keys = [
+      "daily.autoSync.heading",
+      "daily.autoSync.name",
+      "daily.autoSync.desc",
+      "daily.autoSync.interval.name",
+      "daily.autoSync.interval.desc",
+      "status.dailySyncing",
+    ];
+    for (const key of keys) {
+      const enLabel = t(key, "en");
+      const zhLabel = t(key, "zh-CN");
+      assertTrue(
+        enLabel.length > 0 && !enLabel.startsWith("daily.") && !enLabel.startsWith("status."),
+        `en: ${key} resolves`,
+      );
+      assertTrue(
+        zhLabel.length > 0 && !zhLabel.startsWith("daily.") && !zhLabel.startsWith("status."),
+        `zh-CN: ${key} resolves`,
+      );
+      assertTrue(enLabel !== zhLabel, `${key}: en and zh-CN differ`);
+    }
   }
 
   // ── Test 45: spec 0005 tab labels ─────────────────────────────────────
@@ -4095,6 +4141,153 @@ void (async () => {
       savedPayload?.historyState?.lastDailyNoteSyncedAt,
       "2026-05-02",
       "saved data.json preserves small synced history field",
+    );
+  }
+
+  console.log("\n[70] syncDailyNotesData — lightweight path and shared lock");
+  {
+    const stub = await import("./stub-obsidian");
+    stub.resetRequestUrlMock(() => ({ status: 200, json: [], headers: {} }));
+    const settings = withSettings({
+      clientId: "client",
+      accessToken: "access",
+      refreshToken: "refresh",
+      tokenExpiresAt: Date.now() + 86_400_000,
+      syncMovies: false,
+      syncShows: false,
+      syncWatched: true,
+      syncWatchedDetail: true,
+    });
+    let saveCalls = 0;
+    const engine = new SyncEngine(
+      new stub.App() as never,
+      settings,
+      async () => {
+        saveCalls++;
+      },
+    );
+
+    const result = await engine.syncDailyNotesData();
+    assertEq(result.status, "updated", "Daily-only data sync completes");
+    assertEq(result.items.length, 0, "no enabled media types → no merged items");
+    assertEq(
+      stub.requestUrlMock.calls.length,
+      0,
+      "no enabled media types avoids Trakt source calls",
+    );
+    assertEq(saveCalls, 1, "Daily-only data sync persists runtime state once");
+
+    (engine as unknown as { syncing: boolean }).syncing = true;
+    const locked = await engine.syncDailyNotesData();
+    assertEq(
+      locked.status,
+      "already_running",
+      "Daily-only data sync uses the shared SyncEngine lock",
+    );
+    assertEq(locked.items.length, 0, "locked Daily-only sync returns no items");
+  }
+
+  console.log("\n[71] syncDailyNotesData — respects multi-device history coordinator");
+  {
+    const stub = await import("./stub-obsidian");
+    const movie = {
+      title: "Example Movie",
+      year: 2026,
+      ids: { trakt: 321, slug: "example-movie-2026", imdb: "tt0321000", tmdb: 654 },
+      overview: "Example overview",
+      runtime: 100,
+      country: "us",
+      genres: ["drama"],
+      rating: 7.5,
+      votes: 100,
+      certification: "PG",
+      language: "en",
+      status: "released",
+    };
+    stub.resetRequestUrlMock((req) => {
+      if (req.url.includes("/sync/watched/movies")) {
+        return {
+          status: 200,
+          json: [
+            {
+              plays: 1,
+              last_watched_at: "2026-05-16T12:00:00.000Z",
+              last_updated_at: "2026-05-16T12:00:00.000Z",
+              movie,
+            },
+          ],
+          headers: {},
+        };
+      }
+      if (req.url.includes("/sync/history/movies")) {
+        return {
+          status: 200,
+          json: [
+            {
+              id: 9001,
+              watched_at: "2026-05-16T12:00:00.000Z",
+              action: "watch",
+              type: "movie",
+              movie,
+            },
+          ],
+          headers: {},
+        };
+      }
+      return { status: 200, json: [], headers: {} };
+    });
+
+    const settings = withSettings({
+      clientId: "client",
+      accessToken: "access",
+      refreshToken: "refresh",
+      tokenExpiresAt: Date.now() + 86_400_000,
+      syncMovies: true,
+      syncShows: false,
+      syncWatchlist: false,
+      syncWatched: true,
+      syncWatchedDetail: true,
+      syncFavorites: false,
+      syncRatings: false,
+      historyFullRefreshIntervalDays: 999,
+      historyState: {
+        ...EMPTY_HISTORY_STATE,
+        lastIncrementalSyncAt: "2026-05-12T00:00:00.000Z",
+        lastFullRefreshAt: "2026-05-10T00:00:00.000Z",
+        lastAuthoritativeFullRefreshAt: "2026-05-15T00:00:00.000Z",
+      },
+    });
+    const engine = new SyncEngine(
+      new stub.App() as never,
+      settings,
+      async () => undefined,
+    );
+
+    const result = await engine.syncDailyNotesData();
+    const historyUrl =
+      stub.requestUrlMock.calls.find((call) =>
+        call.url.includes("/sync/history/movies"),
+      )?.url || "";
+    assertEq(result.status, "updated", "Daily-only data sync completes");
+    assertEq(result.items.length, 1, "Daily-only data sync returns watched item");
+    assertTrue(
+      historyUrl.length > 0 && !historyUrl.includes("start_at="),
+      "authoritative coordinator forces a full history refresh",
+    );
+    assertEq(
+      result.items[0].watch_history_movie,
+      ["2026-05-16T12:00:00.000Z"],
+      "Daily-only result includes refreshed detailed history",
+    );
+    assertEq(
+      settings.historyState.knownEventIds,
+      [9001],
+      "Daily-only sync rebuilds local runtime event ids",
+    );
+    assertEq(
+      settings.historyState.lastAuthoritativeFullRefreshAt,
+      settings.historyState.lastFullRefreshAt,
+      "full Daily-only refresh updates the synced authoritative coordinator",
     );
   }
 

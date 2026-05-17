@@ -41,7 +41,7 @@ export const POSTER_SIZES = [
 
 export type PosterSize = (typeof POSTER_SIZES)[number];
 
-export const BUILD_CREATED_AT = "2026-05-17 14:18:35 PDT";
+export const BUILD_CREATED_AT = "2026-05-17 16:53:16 PDT";
 
 /**
  * [0.5.0] Settings that can be marked as "device-local" per spec 0003.
@@ -61,6 +61,8 @@ export const LOCAL_ELIGIBLE_KEYS = [
   "syncOnStartup",
   "autoSyncEnabled",
   "autoSyncIntervalMinutes",
+  "dailyNotesAutoSyncEnabled",
+  "dailyNotesAutoSyncIntervalMinutes",
   "uiLanguage",
 ] as const;
 export type LocalEligibleKey = (typeof LOCAL_ELIGIBLE_KEYS)[number];
@@ -78,6 +80,8 @@ export const DEFAULT_LOCAL_KEYS: ReadonlyArray<LocalEligibleKey> = [
   "syncOnStartup",
   "autoSyncEnabled",
   "autoSyncIntervalMinutes",
+  "dailyNotesAutoSyncEnabled",
+  "dailyNotesAutoSyncIntervalMinutes",
 ];
 
 export type ConfirmDangerousActionOptions = {
@@ -374,6 +378,8 @@ export interface TraktrSettings {
   dailyNotesFilenameFormat: string;     // Moment.js, e.g. "YYYY-MM-DD"
   dailyNotesMarkerStart: string;        // default: "%% trakt:daily:start %%"
   dailyNotesMarkerEnd: string;          // default: "%% trakt:daily:end %%"
+  dailyNotesAutoSyncEnabled: boolean;
+  dailyNotesAutoSyncIntervalMinutes: number;
   // [1.0.0] Removed: dailyNotesBackfillDays. Backfill UI is now a
   // date-range modal (BackfillRangeModal) — there's no persistent
   // "default N days" preference any more. Old values in users'
@@ -1215,6 +1221,8 @@ export const DEFAULT_SETTINGS: TraktrSettings = {
   dailyNotesFilenameFormat: "YYYY-MM-DD",
   dailyNotesMarkerStart: "%% trakt:daily:start %%",
   dailyNotesMarkerEnd: "%% trakt:daily:end %%",
+  dailyNotesAutoSyncEnabled: false,
+  dailyNotesAutoSyncIntervalMinutes: 60,
   dailyNotesSyncMode: "default",
 };
 
@@ -1327,6 +1335,7 @@ export class TraktrSettingTab extends PluginSettingTab {
           .onChange(async (value) => {
             this.plugin.settings.dailyNotesEnabled = value;
             await this.plugin.saveSettings();
+            this.plugin.configureDailyNotesAutoSync();
             this.display();
           }),
       );
@@ -1414,6 +1423,45 @@ export class TraktrSettingTab extends PluginSettingTab {
     for (const key of sources) {
       const line = sourcesEl.createEl("div");
       line.setText("• " + t(key));
+    }
+
+    new Setting(containerEl).setName(t("daily.autoSync.heading")).setHeading();
+
+    this.addLocalToggle(
+      new Setting(containerEl)
+        .setName(t("daily.autoSync.name"))
+        .setDesc(t("daily.autoSync.desc"))
+        .addToggle((toggle) =>
+          toggle
+            .setValue(this.plugin.settings.dailyNotesAutoSyncEnabled)
+            .onChange(async (value) => {
+              this.plugin.settings.dailyNotesAutoSyncEnabled = value;
+              await this.plugin.saveSettings();
+              this.plugin.configureDailyNotesAutoSync();
+              this.display();
+            }),
+        ),
+      "dailyNotesAutoSyncEnabled",
+    );
+
+    if (this.plugin.settings.dailyNotesAutoSyncEnabled) {
+      this.addLocalToggle(
+        new Setting(containerEl)
+          .setName(t("daily.autoSync.interval.name"))
+          .setDesc(t("daily.autoSync.interval.desc"))
+          .addSlider((slider) =>
+            slider
+              .setLimits(5, 360, 5)
+              .setValue(this.plugin.settings.dailyNotesAutoSyncIntervalMinutes)
+              .setDynamicTooltip()
+              .onChange(async (value) => {
+                this.plugin.settings.dailyNotesAutoSyncIntervalMinutes = value;
+                await this.plugin.saveSettings();
+                this.plugin.configureDailyNotesAutoSync();
+              }),
+          ),
+        "dailyNotesAutoSyncIntervalMinutes",
+      );
     }
 
     // Manual backfill — slider + button + modal
@@ -1616,6 +1664,8 @@ export class TraktrSettingTab extends PluginSettingTab {
             this.plugin.settings.refreshToken = "";
             this.plugin.settings.tokenExpiresAt = 0;
             await this.plugin.saveSettings();
+            this.plugin.configureAutoSync();
+            this.plugin.configureDailyNotesAutoSync();
             new Notice(t("auth.connection.disconnectedNotice"));
             this.display();
           }),
@@ -2439,6 +2489,7 @@ export class TraktrSettingTab extends PluginSettingTab {
             });
             await this.plugin.saveSettings();
             this.plugin.configureAutoSync();
+            this.plugin.configureDailyNotesAutoSync();
             new Notice(t("reset.notice"));
             this.display();
           }),

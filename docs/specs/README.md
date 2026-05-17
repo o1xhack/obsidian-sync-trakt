@@ -77,6 +77,7 @@ draft  →  accepted  →  implemented  →  (superseded)
 |---|---|---|---|
 | [0001](0001-incremental-sync.md) | Incremental sync (TMDB cache + Trakt history state) | implemented | 0.2.0 |
 | [0010](0010-local-runtime-cache.md) | Local runtime cache storage | implemented | 1.1.1 |
+| [0011](0011-daily-notes-auto-sync.md) | Daily Notes-only auto sync | implemented | 1.2.0 |
 
 ## See also
 

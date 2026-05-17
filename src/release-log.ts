@@ -42,6 +42,13 @@ export interface ReleaseHighlight {
  */
 export const RELEASE_LOG: ReleaseLogEntry[] = [
   {
+    version: "1.2.0",
+    titleEn: "Daily Notes-only auto-sync",
+    titleZh: "Daily Notes 独立自动同步",
+    en: "Daily Notes can now auto-sync on their own interval without running the full media-note write pipeline. The Daily-only path refreshes the same Trakt sources, detailed watch history, and TMDB / Trakt metadata used by full sync, then updates existing Daily Note files only. Media notes are not created, renamed, deleted, or rewritten. Full sync and Daily-only sync share one lock, so manual buttons and both timers cannot write concurrently. The timer settings are device-local by default, so a Mac can refresh Daily Notes frequently while iOS keeps automatic timers off. The today-only Daily Notes command also refreshes source data first, so it no longer renders from stale startup memory after an app restart.",
+    zh: "Daily Notes 现在可以使用独立间隔自动同步，不必触发完整媒体笔记写入流程。Daily-only 路径会刷新与 full sync 相同的 Trakt 来源、详细观看历史以及 TMDB / Trakt 元数据，然后只更新已存在的 Daily Note 文件；不会创建、重命名、删除或重写媒体笔记。full sync 和 Daily-only sync 共用同一个锁，所以手动按钮和两个定时器不会并发写入。这个定时器设置默认按设备本地保存，因此 Mac 可以高频刷新 Daily Notes，iOS 可以保持自动定时关闭。今天的 Daily Notes 手动命令也会先刷新来源数据，不再在 Obsidian 重启后依赖旧的内存快照。",
+  },
+  {
     version: "1.1.2",
     titleEn: "TMDB cache invalidation bugfix",
     titleZh: "TMDB 缓存失效修复",
@@ -119,6 +126,14 @@ export const RELEASE_LOG: ReleaseLogEntry[] = [
 ];
 
 export const RECENT_UPDATE_HIGHLIGHTS: ReleaseHighlight[] = [
+  {
+    en: "Daily Notes can auto-sync independently from full media-note sync, using the same source data without rewriting media notes.",
+    zh: "Daily Notes 可独立于完整媒体笔记同步自动刷新，复用同一套来源数据，但不重写媒体笔记。",
+  },
+  {
+    en: "Large TMDB and detailed-watch-history caches live in local runtime storage, keeping synced data.json small.",
+    zh: "大型 TMDB 与详细观看历史缓存放在本机 runtime storage，同步的 data.json 保持小体积。",
+  },
   {
     en: "Automatic filename rename keeps localized media notes aligned when metadata language changes.",
     zh: "切换元数据语言后，媒体笔记文件名可自动跟随重命名。",

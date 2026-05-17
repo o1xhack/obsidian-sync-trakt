@@ -86,6 +86,11 @@ function baseLangCode(language: string): string {
  */
 export type SyncProgress = (message: string) => void;
 
+export interface DailyNotesDataSyncResult {
+  status: "updated" | "already_running" | "failed";
+  items: NormalizedItem[];
+}
+
 // ── Normalization helpers ──
 
 function baseFromMovie(m: TraktMovie): NormalizedItem {
@@ -804,6 +809,60 @@ export class SyncEngine {
   }
 
   /**
+   * Build a fresh Daily Notes data snapshot without reconciling media notes.
+   *
+   * This intentionally shares the same `syncing` lock with full sync. The
+   * returned items have detailed history applied and metadata localization
+   * enriched, so the Daily Notes renderer sees the same title/year values it
+   * would see after a full sync, but no media files are created, renamed,
+   * deleted, or modified.
+   */
+  async syncDailyNotesData(
+    onProgress?: SyncProgress,
+  ): Promise<DailyNotesDataSyncResult> {
+    const t = getTranslator(this.settings.uiLanguage);
+    if (this.syncing) {
+      new Notice(t("notice.alreadySyncing"));
+      return { status: "already_running", items: [] };
+    }
+
+    this.syncing = true;
+    try {
+      await ensureValidToken(this.settings, this.saveSettings);
+
+      onProgress?.(t("progress.fetchingTrakt"));
+      const merged = new Map<string, NormalizedItem>();
+      await Promise.all([
+        this.settings.syncMovies
+          ? this.fetchAndMergeMovies(merged)
+          : Promise.resolve(),
+        this.settings.syncShows
+          ? this.fetchAndMergeShows(merged)
+          : Promise.resolve(),
+      ]);
+
+      if (this.settings.syncWatched && this.settings.syncWatchedDetail) {
+        await this.syncDetailHistory(false, onProgress);
+      }
+
+      applyHistoryStateToItems(this.settings.historyState, merged.values());
+      const items = [...merged.values()];
+      await this.enrichMetadata(items, onProgress);
+      await this.saveSettings();
+
+      return { status: "updated", items };
+    } catch (e) {
+      const msg =
+        e instanceof Error ? e.message : "Unknown error during Daily Notes sync.";
+      console.error("[Traktr] Daily Notes data sync failed:", e);
+      new Notice(t("notice.syncFailed", { msg }), 10000);
+      return { status: "failed", items: [] };
+    } finally {
+      this.syncing = false;
+    }
+  }
+
+  /**
    * Create tag note files for all tag notes referenced by the merged items.
    * Only creates files that don't already exist — never overwrites.
    */
@@ -1018,6 +1077,58 @@ export class SyncEngine {
     }
   }
 
+  private async enrichMetadata(
+    itemList: NormalizedItem[],
+    onProgress?: SyncProgress,
+  ): Promise<void> {
+    const t = getTranslator(this.settings.uiLanguage);
+    const language = getEffectiveMetadataLanguage(this.settings);
+    const fallbackLanguage = getEffectiveMetadataFallbackLanguage(this.settings);
+    if (this.settings.tmdbApiKey) {
+      await processWithConcurrency(
+        itemList,
+        TMDB_CONCURRENCY,
+        async (item) => {
+          if (!item.ids.tmdb) {
+            if (language) {
+              await this.applyTraktTranslation(
+                item,
+                language,
+                fallbackLanguage,
+              );
+            }
+            return;
+          }
+          const fetcher =
+            item.type === "movie" ? fetchMovieMetadata : fetchTvMetadata;
+          const meta = await fetcher(
+            item.ids.tmdb,
+            this.settings.tmdbApiKey,
+            this.settings.posterSize,
+            language,
+            this.settings.tmdbCache,
+            this.settings.tmdbCacheTtlDays,
+            fallbackLanguage,
+          );
+          item.poster_url = meta.poster_url;
+          if (meta.translation) {
+            applyTranslation(item, meta.translation);
+          }
+        },
+        (done, total) =>
+          onProgress?.(t("progress.fetchingMetadata", { done, total })),
+      );
+    } else if (language) {
+      await processWithConcurrency(
+        itemList,
+        TRAKT_TRANSLATION_CONCURRENCY,
+        (item) => this.applyTraktTranslation(item, language, fallbackLanguage),
+        (done, total) =>
+          onProgress?.(t("progress.fetchingTranslations", { done, total })),
+      );
+    }
+  }
+
   /**
    * Fetch a translation from Trakt's /translations/{lang} endpoint and apply
    * it to the item. Only used when no TMDB API key is configured (or the item
@@ -1092,58 +1203,8 @@ export class SyncEngine {
     //   - keeps us comfortably under TMDB's 50 req/s rate limit
     //   - 1000+ item libraries no longer blast the rate-limit bucket and
     //     silently lose posters/translations to swallowed 429s
-    const language = getEffectiveMetadataLanguage(this.settings);
-    // [0.9.0] When set, enables strict-match-then-fallback semantics in both
-    // the TMDB picker and the Trakt translation endpoint. Empty string =
-    // current loose behaviour (spec 0008).
-    const fallbackLanguage = getEffectiveMetadataFallbackLanguage(this.settings);
     const itemList = [...mergedItems.values()];
-    if (this.settings.tmdbApiKey) {
-      await processWithConcurrency(
-        itemList,
-        TMDB_CONCURRENCY,
-        async (item) => {
-          if (!item.ids.tmdb) {
-            // No TMDB ID — try Trakt's translation endpoint as a fallback
-            // when i18n is enabled. Posters require TMDB, so we skip those.
-            if (language) {
-              await this.applyTraktTranslation(item, language, fallbackLanguage);
-            }
-            return;
-          }
-          const fetcher =
-            item.type === "movie" ? fetchMovieMetadata : fetchTvMetadata;
-          // Cache layer is inside the fetcher: hits return immediately,
-          // misses fetch + write through. Stale entries are returned with
-          // a fire-and-forget background revalidation. See spec 0001 §A.
-          const meta = await fetcher(
-            item.ids.tmdb,
-            this.settings.tmdbApiKey,
-            this.settings.posterSize,
-            language,
-            this.settings.tmdbCache,
-            this.settings.tmdbCacheTtlDays,
-            fallbackLanguage,
-          );
-          item.poster_url = meta.poster_url;
-          if (meta.translation) {
-            applyTranslation(item, meta.translation);
-          }
-        },
-        (done, total) =>
-          onProgress?.(t("progress.fetchingMetadata", { done, total })),
-      );
-    } else if (language) {
-      // No TMDB key + i18n enabled → fall back to Trakt's translation
-      // endpoint. Same concurrency-limited treatment as the TMDB path.
-      await processWithConcurrency(
-        itemList,
-        TRAKT_TRANSLATION_CONCURRENCY,
-        (item) => this.applyTraktTranslation(item, language, fallbackLanguage),
-        (done, total) =>
-          onProgress?.(t("progress.fetchingTranslations", { done, total })),
-      );
-    }
+    await this.enrichMetadata(itemList, onProgress);
 
     // Scan immediately before writing. This matters for multi-device vaults:
     // Obsidian Sync may download existing media notes while the metadata

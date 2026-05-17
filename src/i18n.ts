@@ -77,6 +77,26 @@ const STRINGS = {
     en: "Rated → requires Sync ratings",
     "zh-CN": "打分 → 需要开启「同步评分」",
   },
+  "daily.autoSync.heading": {
+    en: "Daily Notes auto-sync",
+    "zh-CN": "Daily Notes 自动同步",
+  },
+  "daily.autoSync.name": {
+    en: "Auto-sync Daily Notes only",
+    "zh-CN": "仅自动同步 Daily Notes",
+  },
+  "daily.autoSync.desc": {
+    en: "Periodically refresh Trakt data needed for Daily Notes and update existing Daily Note files. Media notes are not created, renamed, deleted, or rewritten.",
+    "zh-CN": "定时刷新 Daily Notes 所需的 Trakt 数据并更新已存在的 Daily Note 文件。不会创建、重命名、删除或重写媒体笔记。",
+  },
+  "daily.autoSync.interval.name": {
+    en: "Daily Notes auto-sync interval (minutes)",
+    "zh-CN": "Daily Notes 自动同步间隔（分钟）",
+  },
+  "daily.autoSync.interval.desc": {
+    en: "How often to refresh Daily Notes. Minimum 5, maximum 360. This setting is device-local by default.",
+    "zh-CN": "刷新 Daily Notes 的频率。最小 5，最大 360。该设置默认按设备单独保存。",
+  },
   // [0.8.0] Today-mode write strategy. Section sits at the bottom of
   // the Daily Notes tab, after Manual backfill. Renders a comparison
   // table so the user can pick the right mode for their workflow.
@@ -942,6 +962,10 @@ const STRINGS = {
 
   // ── Status bar ──
   "status.syncing": { en: "⟳ Syncing…", "zh-CN": "⟳ 同步中…" },
+  "status.dailySyncing": {
+    en: "⟳ Syncing Daily Notes…",
+    "zh-CN": "⟳ 同步 Daily Notes 中…",
+  },
   // [0.7.3] Prefix used by the in-progress sync Notice (re-rendered per
   // progress tick) and by the per-error follow-up notice. Notice strings
   // for one-shot Notices bake the prefix in directly instead.

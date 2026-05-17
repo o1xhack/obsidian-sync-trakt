@@ -5,7 +5,7 @@ Reads top-to-bottom or jump via the table of contents. Companion to
 the [design specs](specs/) — specs explain *why*, this doc explains
 *what is*.
 
-**Currency**: this doc reflects the codebase as of 1.1.2. When you ship
+**Currency**: this doc reflects the codebase as of 1.2.0. When you ship
 behavior changes that affect the architecture, update this doc in the
 same commit.
 
@@ -172,6 +172,39 @@ Throughout, `onProgress(message)` is called at section boundaries and
 inside the bounded-concurrency loop, driving both status bar (desktop)
 and a persistent `Notice` (mobile + desktop).
 
+### Daily Notes-only sync flow
+
+`SyncEngine.syncDailyNotesData()` is the lightweight path introduced in
+1.2.0 for the separate Daily Notes auto-sync setting. It deliberately
+shares the same source-fetch, detailed-history, token refresh, and
+metadata-enrichment code as full sync, then stops before media-note
+reconciliation.
+
+Sequence:
+
+1. `ensureValidToken`
+2. Fetch enabled Trakt source endpoints into the same
+   `Map<"type:traktId", NormalizedItem>` shape used by full sync.
+3. If watched detail is enabled, refresh detailed history with the same
+   incremental/full-refresh decision logic as full sync.
+4. Apply `historyState` to merged items.
+5. Enrich metadata through the same TMDB / Trakt translation path as
+   full sync.
+6. Persist runtime state with `saveSettings()`.
+7. Return the merged items to `main.ts`.
+
+It does **not** call `ensureTagNotes`, `scanExistingNotes`, media-note
+create/update/delete, filename rename, or frontmatter/body rewrite. The
+plugin layer receives the fresh item snapshot and then calls the existing
+Daily Notes writers:
+
+- Daily-only timer: `processCatchUp()`
+- Manual today command: `processDate(today, "today")`
+
+The manual today command used to render from `lastMergedItems`; 1.2.0
+refreshes source data first so app restarts and devices with full
+auto-sync disabled do not render from stale or empty memory.
+
 ## 4. Data structures
 
 ### NormalizedItem (in-memory, ephemeral per sync)
@@ -296,6 +329,15 @@ interface TraktrSettings {
   overwriteExisting: boolean;
   deleteRemovedItems: boolean;
 
+  // ── Daily Notes ──
+  dailyNotesEnabled: boolean;
+  dailyNotesFolder: string;
+  dailyNotesFilenameFormat: string;
+  dailyNotesMarkerStart: string;
+  dailyNotesMarkerEnd: string;
+  dailyNotesAutoSyncEnabled: boolean;          // default false
+  dailyNotesAutoSyncIntervalMinutes: number;   // default 60
+
   // ── [0.2.0] TMDB cache ──
   tmdbCache: TmdbCache;
   tmdbCacheTtlDays: number;            // default 90; "never" maps to a very large value
@@ -340,6 +382,9 @@ interface HistoryState {
   knownEventIds: number[];          // every event id we've seen
   lastIncrementalSyncAt: string;    // ISO-8601 timestamp; "" on first run
   lastFullRefreshAt: string;        // ISO-8601 timestamp; "" on first run
+  lastDailyNoteSyncedAt: string;    // small synced Daily Notes cursor
+  lastAuthoritativeFullRefreshAt?: string; // small synced runtime coordinator
+  lastReleaseNoticeVersion?: string;
 }
 ```
 
@@ -463,6 +508,13 @@ Three concurrency choices in the sync flow:
    - Allows progress reporting during the loop (status bar / Notice)
    - Doesn't try to pretend a 1200-item burst is OK
 
+Full sync and Daily Notes-only sync share one `SyncEngine.syncing` lock.
+If the full sync button, full auto-sync timer, Daily Notes command, and
+Daily Notes auto-sync timer collide, the first run owns the lock and the
+later run exits with the existing "already syncing" notice. This avoids
+concurrent writers to `historyState`, TMDB runtime cache, Daily Note
+marker regions, and media-note files.
+
 The numbers (5 for TMDB, no cap on Trakt — those are sequential within
 a paginated call) are tuned for safety, not maximum throughput. With the
 0.2.0 cache, most syncs make ≤10 TMDB calls anyway, so the cap is
@@ -536,7 +588,17 @@ that arrived via vault sync after the plugin loaded, **0.2.0 added a
 `visibilitychange` listener that re-reads `data.json` when Obsidian
 becomes visible again** (e.g. user switches back from another app).
 Re-read is in-place: `this.settings` keeps object identity so
-`SyncEngine`'s reference stays valid.
+`SyncEngine`'s reference stays valid. After re-reading settings, both
+auto-sync timers are reconfigured so a token or setting arriving from
+another device starts or stops local scheduling correctly.
+
+The default device-local keys are `syncOnStartup`, `autoSyncEnabled`,
+`autoSyncIntervalMinutes`, `dailyNotesAutoSyncEnabled`, and
+`dailyNotesAutoSyncIntervalMinutes`. `uiLanguage` is eligible for the
+same cloud-toggle override but defaults to synced. This lets a Mac run
+full sync and Daily Notes-only sync on different intervals while iOS
+keeps both timers off, without forking the shared source toggles or note
+rendering settings.
 
 ## 11. Note rendering pipeline
 
