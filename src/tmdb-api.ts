@@ -9,9 +9,9 @@ import type {
 const TMDB_BASE = "https://api.themoviedb.org/3";
 const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p";
 const SIMPLIFIED_ONLY_TITLE_CHARS =
-  "钢铁国剧话后发云龙马爱体边这过东叶万为无乐们见点车长汉湾台广丽门书";
+  "钢铁国剧话发云龙马爱体边这过东叶万为无乐们见点车长汉湾广丽门书与间气阴阳风杀战亲义语声会时来从对开关动机复宝儿学欢恶侠众传处写";
 const TRADITIONAL_ONLY_TITLE_CHARS =
-  "鋼鐵國劇話後發雲龍馬愛體邊這過東葉萬為無樂們見點車長漢灣臺廣麗門書";
+  "鋼鐵國劇話發雲龍馬愛體邊這過東葉萬為無樂們見點車長漢灣廣麗門書與間氣陰陽風殺戰親義語聲會時來從對開關動機復寶兒學歡惡俠眾傳處寫";
 
 /**
  * One day in ms. Used for TTL math + jitter.
@@ -499,7 +499,11 @@ export function pickBestTranslation(
         title,
       };
     }
-    if (mainTitleUsableForRequestedLanguage) {
+    // No exact primary row means TMDB may have returned an internal fallback
+    // title at the response root. In strict mode, only treat that root title
+    // as primary when it is the item's own original language and that original
+    // locale is compatible with the user's requested locale.
+    if (mainTitleMatchesRequestedOriginalLanguage) {
       return {
         title: mainTitle,
         overview: mainOverview,

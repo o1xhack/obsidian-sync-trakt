@@ -3126,6 +3126,22 @@ void (async () => {
       "TMDB strict zh-CN miss → en fallback (NOT zh-TW)",
     );
 
+    const dataNoCNTopLevelTw: TmdbMovieResponse = {
+      ...dataNoCN,
+      title: "黑暗騎士",
+    };
+    const topLevelTwFallback = pickBestTranslation(
+      dataNoCNTopLevelTw,
+      "zh-CN",
+      "movie",
+      "en",
+    );
+    assertEq(
+      topLevelTwFallback?.title,
+      "The Dark Knight",
+      "TMDB strict zh-CN miss ignores TMDB top-level zh-TW fallback",
+    );
+
     // Both primary and fallback miss → null
     const dataOnlyTw: TmdbMovieResponse = {
       ...data,
@@ -3336,6 +3352,36 @@ void (async () => {
       missingPrimary?.title,
       "Some English Show",
       "strict zh-CN still falls back to configured fallback when requested language is unavailable",
+    );
+
+    const missingPrimaryWithNonRequestedTopLevel = pickBestTranslation(
+      {
+        poster_path: "/ko.jpg",
+        original_name: "오징어 게임",
+        name: "Squid Game",
+        original_language: "ko",
+        translations: {
+          translations: [
+            {
+              iso_639_1: "ja",
+              iso_3166_1: "JP",
+              data: {
+                name: "イカゲーム",
+                overview: "日本語の概要",
+                tagline: "",
+              },
+            },
+          ],
+        },
+      },
+      "zh-CN",
+      "tv",
+      "ja-JP",
+    );
+    assertEq(
+      missingPrimaryWithNonRequestedTopLevel?.title,
+      "イカゲーム",
+      "strict mode ignores non-requested top-level title before trying fallback",
     );
   }
 
@@ -3894,7 +3940,7 @@ void (async () => {
     const merged = mergeSyncedHistoryFields(runtimeHistory, {
       lastDailyNoteSyncedAt: "2026-05-16",
       lastAuthoritativeFullRefreshAt: "2026-05-15T01:00:00.000Z",
-      lastReleaseNoticeVersion: "1.1.0",
+      lastReleaseNoticeVersion: "1.1.1",
     });
     assertEq(
       merged.byMovie,
@@ -3913,7 +3959,7 @@ void (async () => {
     );
     assertEq(
       merged.lastReleaseNoticeVersion,
-      "1.1.0",
+      "1.1.1",
       "merge overlays synced release notice dismissal",
     );
   }

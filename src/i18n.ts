@@ -811,9 +811,9 @@ const STRINGS = {
     "zh-CN": "清空 TMDB 缓存？",
   },
   "confirm.clearTmdb.body": {
-    en: "This clears cached TMDB metadata such as poster URLs, translated titles, overviews, taglines, and genres.\nNotes are not deleted or edited immediately. The next sync may re-fetch metadata from TMDB.\nIn 1.1.0 this cache lives in local runtime storage, not synced data.json, so clearing it does not reduce Obsidian Sync storage history.",
+    en: "This clears cached TMDB metadata such as poster URLs, translated titles, overviews, taglines, and genres.\nNotes are not deleted or edited immediately. The next sync may re-fetch metadata from TMDB.\nThis runtime cache lives in local device storage, not synced data.json, so clearing it does not reduce Obsidian Sync storage history.",
     "zh-CN":
-      "这会清空本机缓存的 TMDB 元数据，包括海报地址、翻译标题、简介、tagline 和类型。\n已有笔记不会立刻被删除或修改。下次同步可能会重新从 TMDB 拉取元数据。\n在 1.1.0 中，这些缓存位于本机 runtime 存储，不在同步的 data.json 里；清空它不会减少 Obsidian Sync 的历史占用。",
+      "这会清空本机缓存的 TMDB 元数据，包括海报地址、翻译标题、简介、tagline 和类型。\n已有笔记不会立刻被删除或修改。下次同步可能会重新从 TMDB 拉取元数据。\n这些 runtime 缓存位于本机设备存储，不在同步的 data.json 里；清空它不会减少 Obsidian Sync 的历史占用。",
   },
   "confirm.clearTmdb.confirm": {
     en: "Clear cache",

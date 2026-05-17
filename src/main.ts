@@ -302,7 +302,7 @@ export default class TraktrPlugin extends Plugin {
   }
 
   /**
-   * [1.1.0] Render the current release note plus a versionless recent
+   * [1.1.1] Render the current release note plus a versionless recent
    * highlights recap. Startup calls mark the version dismissed; Settings
    * calls are user-initiated and only re-open the modal.
    */
@@ -665,7 +665,7 @@ export default class TraktrPlugin extends Plugin {
       );
     }
 
-    // [1.1.0] Persist rebuildable runtime data outside the vault so
+    // [1.1.1] Persist rebuildable runtime data outside the vault so
     // Obsidian Sync never sees multi-megabyte cache churn.
     await this.runtimeStore.save(this.buildRuntimePayload());
 

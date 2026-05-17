@@ -7,11 +7,13 @@ plugin is submitted to Obsidian's official Community Plugins directory.
 
 For the full design rationale behind major changes, see [`specs/`](specs/).
 
-## 1.1.0 — 2026-05-16
+## 1.1.1 — 2026-05-17
 
-**Local runtime cache storage.** Reworked cache persistence so
-Obsidian Sync Standard's 5 MB single-file limit no longer applies to
-the plugin's large rebuildable runtime data.
+**Local runtime cache storage + strict metadata safety.** Reworked cache
+persistence so Obsidian Sync Standard's 5 MB single-file limit no longer
+applies to large rebuildable runtime data, and tightened the 0.9.x
+strict metadata fallback rules so locale variants do not silently
+substitute for one another.
 
 ### Added
 
@@ -22,6 +24,12 @@ the plugin's large rebuildable runtime data.
 - Tests for slim synced history payloads, runtime-data detection,
   synced/local history-field merge behavior, and RuntimeStore fallback
   persistence.
+- A Sync-tab dedupe maintenance action that scans current notes by
+  `trakt_type + trakt_id`, keeps the note matching the current filename
+  template, and moves duplicate copies to Obsidian trash.
+- Second-confirmation dialogs for destructive maintenance actions:
+  disconnecting Trakt, clearing TMDB cache, clearing detailed history
+  state, deduplicating notes, and restoring defaults.
 
 ### Changed
 
@@ -29,7 +37,7 @@ the plugin's large rebuildable runtime data.
   coordination fields. Large `tmdbCache` and detailed-history aggregate
   data move to local runtime storage.
 - Existing large `data.json` payloads are migrated automatically on
-  first 1.1.0 launch: runtime data is seeded locally, then `data.json`
+  first 1.1.1 launch: runtime data is seeded locally, then `data.json`
   is rewritten as a slim synced payload.
 - `saveSettings()` now skips Obsidian `saveData()` when the slim synced
   payload is unchanged, reducing version-history churn from frequent
@@ -37,6 +45,16 @@ the plugin's large rebuildable runtime data.
 - Detailed-history full refreshes now update a small synced
   `lastAuthoritativeFullRefreshAt` coordinator so other devices force
   a local full refresh before writing from stale history caches.
+- Same-ID collision handling now checks the collided note's frontmatter
+  before creating a fallback filename, preventing duplicate notes during
+  Obsidian Sync download races.
+- Strict TMDB metadata fallback now keeps `zh-CN`, `zh-TW` / `zh-HK`,
+  Japanese, Korean, and configured fallback languages separate. TMDB
+  top-level original-language titles are used only when compatible with
+  the user's metadata locale; Simplified and Traditional Chinese are not
+  treated as interchangeable.
+- The Daily Notes marker warning in settings is now a gentler inline
+  warning instead of a large red block.
 
 ### Migration
 

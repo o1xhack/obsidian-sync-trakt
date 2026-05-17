@@ -5,7 +5,7 @@ Reads top-to-bottom or jump via the table of contents. Companion to
 the [design specs](specs/) — specs explain *why*, this doc explains
 *what is*.
 
-**Currency**: this doc reflects the codebase as of 1.1.0. When you ship
+**Currency**: this doc reflects the codebase as of 1.1.1. When you ship
 behavior changes that affect the architecture, update this doc in the
 same commit.
 
@@ -237,7 +237,7 @@ interface NormalizedItem {
 
 The plugin's complete in-memory state. Loaded once at `onload()`,
 mutated in place during the session, written back via `saveSettings()`.
-As of 1.1.0 this is intentionally larger than vault-synced
+As of 1.1.1 this is intentionally larger than vault-synced
 `data.json`: `tmdbCache` and the large portions of `historyState` live
 in vault-external local runtime storage and are overlaid into
 `this.settings` after synced settings load.
@@ -344,7 +344,7 @@ interface HistoryState {
 
 ## 5. Caching layers
 
-As of 1.1.0, cache architecture is split by sync semantics.
+As of 1.1.1, cache architecture is split by sync semantics.
 
 ### Vault-synced settings (`data.json`)
 

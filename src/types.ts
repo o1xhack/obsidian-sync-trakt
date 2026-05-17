@@ -159,7 +159,7 @@ export interface EpisodeWatchHistory {
 }
 
 /**
- * Persistent aggregated state for the detailed watch history. As of 1.1.0,
+ * Persistent aggregated state for the detailed watch history. As of 1.1.1,
  * the large aggregate fields live in vault-external runtime storage; only
  * small cross-device coordination fields are written to `data.json`. See
  * specs 0001 and 0010 for design.
@@ -187,7 +187,7 @@ export interface HistoryState {
   // Empty string means "never run" (first sync after enabling).
   // See spec 0006 §"Catch-up algorithm".
   lastDailyNoteSyncedAt: string;
-  // [1.1.0] Synced coordinator for local runtime caches. When any device
+  // [1.1.1] Synced coordinator for local runtime caches. When any device
   // completes a full history refresh, it writes that timestamp here; devices
   // with an older local lastFullRefreshAt must full-refresh before writing
   // detailed watch history from local cache.

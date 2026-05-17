@@ -1,7 +1,7 @@
 # 0010 — Local runtime cache storage
 
 - **Status**: implemented
-- **Released in**: 1.1.0
+- **Released in**: 1.1.1
 - **Date**: 2026-05-16
 - **Authors**: @o1xhack, Codex
 - **Supersedes**: 0001 storage placement for TMDB cache and Trakt history state
@@ -36,7 +36,7 @@ frequently rewritten, and fully rebuildable from Trakt / TMDB.
   sync across Mac, Windows, Linux, iOS, and Android.
 - Keep the same in-memory cache shapes so the sync engine and renderers
   do not need a conceptual rewrite.
-- Migrate existing users automatically: first 1.1.0 launch moves large
+- Migrate existing users automatically: first 1.1.1 launch moves large
   runtime data out of `data.json` and writes back a slim payload.
 - Treat local runtime storage as persistent but rebuildable. It should
   survive normal app restarts, but losing it must not lose user data.
@@ -81,7 +81,7 @@ The synced `historyState` deliberately contains empty aggregate fields:
     "lastIncrementalSyncAt": "",
     "lastFullRefreshAt": "",
     "lastDailyNoteSyncedAt": "2026-05-16",
-    "lastReleaseNoticeVersion": "1.1.0",
+    "lastReleaseNoticeVersion": "1.1.1",
     "lastAuthoritativeFullRefreshAt": "2026-05-16T18:00:00.000Z"
   },
   "tmdbCache": {}
@@ -176,7 +176,7 @@ layer.
 
 ## Migration / backward compatibility
 
-On first 1.1.0 launch:
+On first 1.1.1 launch:
 
 1. Load existing `data.json`.
 2. If local runtime storage is empty and `data.json` contains populated
