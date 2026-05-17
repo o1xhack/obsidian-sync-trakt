@@ -5,7 +5,7 @@ Reads top-to-bottom or jump via the table of contents. Companion to
 the [design specs](specs/) — specs explain *why*, this doc explains
 *what is*.
 
-**Currency**: this doc reflects the codebase as of 1.1.1. When you ship
+**Currency**: this doc reflects the codebase as of 1.1.2. When you ship
 behavior changes that affect the architecture, update this doc in the
 same commit.
 

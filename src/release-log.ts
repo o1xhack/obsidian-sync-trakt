@@ -42,6 +42,14 @@ export interface ReleaseHighlight {
  */
 export const RELEASE_LOG: ReleaseLogEntry[] = [
   {
+    version: "1.1.2",
+    titleEn: "TMDB cache invalidation bugfix",
+    titleZh: "TMDB 缓存失效修复",
+    isBugfix: true,
+    en: "Fixes an upgrade issue where users who already installed 1.1.1 could stay on stale TMDB runtime-cache entries written by older title-picking logic. Those entries are now refetched automatically, so Daily Notes and media-note filenames can update from old English or wrong-locale titles without requiring users to manually clear the TMDB cache.",
+    zh: "修复已经安装 1.1.1 的用户可能继续读取旧版标题选择逻辑写入的 TMDB runtime 缓存的问题。旧缓存现在会自动重新拉取，因此 Daily Notes 和媒体笔记文件名可以从旧英文标题或错误 locale 标题更新回来，不需要用户手动清空 TMDB 缓存。",
+  },
+  {
     version: "1.1.1",
     titleEn: "Runtime cache storage and safer maintenance",
     titleZh: "运行缓存存储与维护安全性",

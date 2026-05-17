@@ -7,6 +7,19 @@ plugin is submitted to Obsidian's official Community Plugins directory.
 
 For the full design rationale behind major changes, see [`specs/`](specs/).
 
+## 1.1.2 — 2026-05-17
+
+**TMDB cache invalidation bugfix.** Users who already updated to 1.1.1
+need a real version bump so Obsidian and GitHub can deliver the fix.
+
+### Fixed
+
+- TMDB metadata cache entries produced by older title-picking logic are
+  now treated as cache misses and refetched synchronously, even if their
+  TTL has not expired. This prevents stale runtime cache from keeping
+  Daily Notes or media-note filenames stuck on an old English or
+  wrong-locale title after upgrading.
+
 ## 1.1.1 — 2026-05-17
 
 **Local runtime cache storage + strict metadata safety.** Reworked cache
