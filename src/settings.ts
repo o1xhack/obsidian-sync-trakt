@@ -41,7 +41,7 @@ export const POSTER_SIZES = [
 
 export type PosterSize = (typeof POSTER_SIZES)[number];
 
-export const BUILD_CREATED_AT = "2026-05-17 00:40:11 PDT";
+export const BUILD_CREATED_AT = "2026-05-17 13:59:30 PDT";
 
 /**
  * [0.5.0] Settings that can be marked as "device-local" per spec 0003.

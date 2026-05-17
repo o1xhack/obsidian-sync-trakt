@@ -36,6 +36,7 @@ import {
   tmdbCacheStats,
   fetchMovieMetadata,
   verifyTmdbApiKey,
+  TMDB_CACHE_ENTRY_VERSION,
   type TmdbMovieResponse,
 } from "../src/tmdb-api";
 import {
@@ -1345,10 +1346,42 @@ console.log("\n[23] TMDB cache helpers (key composition, freshness, expiry)");
   // Freshness states.
   const now = 1_000_000_000_000;
   assertEq(cacheEntryFreshness(undefined, now), "missing", "undefined → missing");
-  assertEq(cacheEntryFreshness({ poster_url: "", translation: null, cached_at: now - 1000, expires_at: now + 1000 }, now), "fresh",
-    "expires_at in future → fresh");
-  assertEq(cacheEntryFreshness({ poster_url: "", translation: null, cached_at: now - 10000, expires_at: now - 1 }, now), "stale",
-    "expires_at in past → stale");
+  assertEq(
+    cacheEntryFreshness(
+      {
+        cache_version: TMDB_CACHE_ENTRY_VERSION,
+        poster_url: "",
+        translation: null,
+        cached_at: now - 1000,
+        expires_at: now + 1000,
+      },
+      now,
+    ),
+    "fresh",
+    "expires_at in future → fresh",
+  );
+  assertEq(
+    cacheEntryFreshness(
+      {
+        cache_version: TMDB_CACHE_ENTRY_VERSION,
+        poster_url: "",
+        translation: null,
+        cached_at: now - 10000,
+        expires_at: now - 1,
+      },
+      now,
+    ),
+    "stale",
+    "expires_at in past → stale",
+  );
+  assertEq(
+    cacheEntryFreshness(
+      { poster_url: "", translation: null, cached_at: now - 1000, expires_at: now + 1000 },
+      now,
+    ),
+    "missing",
+    "cache entries from older picker versions are refetched synchronously",
+  );
 
   // TTL = 0 means never expire (we use MAX_SAFE_INTEGER as sentinel).
   const neverExp = computeCacheExpiry(0, now);
@@ -1426,6 +1459,7 @@ void (async () => {
     const cache: TmdbCache = {};
     const key = tmdbCacheKey("movie", 999, "zh-CN");
     cache[key] = {
+      cache_version: TMDB_CACHE_ENTRY_VERSION,
       poster_url: "https://image.tmdb.org/t/p/w500/cached.jpg",
       translation: { title: "缓存标题", overview: "缓存简介", tagline: "", genres: ["动作"] },
       cached_at: Date.now() - 60_000,

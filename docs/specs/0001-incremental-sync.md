@@ -92,6 +92,7 @@ field is preserved; new field defaults to `{}`.
 type TmdbCacheKey = string;     // `${type}:${tmdbId}:${language || 'default'}`
 
 interface TmdbCacheEntry {
+  cache_version?: number;            // processed metadata picker version
   poster_url: string;           // possibly "" if TMDB had no poster
   translation: TmdbTranslation | null;
   cached_at: number;            // unix ms when the entry was written
@@ -332,7 +333,8 @@ sync(onProgress):
     scanExistingNotes()
     for each item with tmdb id:
       cache lookup by (type, tmdbId, language)
-      cache hit (fresh) → use cached
+      cache hit (fresh + current picker version) → use cached
+      cache hit (old picker version) → treat as miss and refetch sync
       cache hit (stale) → use cached, async revalidate
       cache miss        → fetch sync, write cache
       apply translation, set poster_url

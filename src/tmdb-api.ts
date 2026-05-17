@@ -8,6 +8,7 @@ import type {
 
 const TMDB_BASE = "https://api.themoviedb.org/3";
 const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p";
+export const TMDB_CACHE_ENTRY_VERSION = 2 as const;
 const SIMPLIFIED_ONLY_TITLE_CHARS =
   "钢铁国剧话发云龙马爱体边这过东叶万为无乐们见点车长汉湾广丽门书与间气阴阳风杀战亲义语声会时来从对开关动机复宝儿学欢恶侠众传处写";
 const TRADITIONAL_ONLY_TITLE_CHARS =
@@ -110,6 +111,7 @@ export function cacheEntryFreshness(
   now = Date.now(),
 ): "missing" | "fresh" | "stale" {
   if (!entry) return "missing";
+  if (entry.cache_version !== TMDB_CACHE_ENTRY_VERSION) return "missing";
   return entry.expires_at > now ? "fresh" : "stale";
 }
 
@@ -293,6 +295,7 @@ async function fetchTmdbMetadataCached(
   // rather retry next time than cache a placeholder.
   if (fresh.poster_url || fresh.translation || !language) {
     cache[key] = {
+      cache_version: TMDB_CACHE_ENTRY_VERSION,
       poster_url: fresh.poster_url,
       translation: fresh.translation,
       cached_at: Date.now(),
@@ -324,6 +327,7 @@ async function revalidateInBackground(
     );
     if (fresh.poster_url || fresh.translation || !language) {
       cache[key] = {
+        cache_version: TMDB_CACHE_ENTRY_VERSION,
         poster_url: fresh.poster_url,
         translation: fresh.translation,
         cached_at: Date.now(),

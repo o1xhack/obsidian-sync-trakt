@@ -53,6 +53,9 @@ substitute for one another.
   top-level original-language titles are used only when compatible with
   the user's metadata locale; Simplified and Traditional Chinese are not
   treated as interchangeable.
+- TMDB metadata cache entries produced by older title-picking logic are
+  refetched automatically, so a still-fresh runtime cache cannot keep
+  Daily Notes or media notes stuck on an old English / wrong-locale title.
 - The Daily Notes marker warning in settings is now a gentler inline
   warning instead of a large red block.
 

@@ -312,6 +312,7 @@ interface TraktrSettings {
 type TmdbCacheKey = string;  // `${type}:${tmdbId}:${language || 'default'}`
 
 interface TmdbCacheEntry {
+  cache_version?: number;    // processed TMDB metadata picker version
   poster_url: string;
   translation: TmdbTranslation | null;
   cached_at: number;       // unix ms
@@ -394,6 +395,10 @@ Two independent caches with different concerns and lifetimes.
   refreshed in the background; failed background fetches preserve the
   stale entry
 - **Manual control**: `Settings → TMDB → Clear cache` button
+- **Picker-version safety**: processed cache entries carry a
+  `cache_version`. Entries produced by older title-picking logic are
+  treated as cache misses and refetched synchronously, even if their TTL
+  has not expired.
 
 ### History state (Phase C)
 

@@ -246,6 +246,12 @@ export interface DailyNoteEvent {
  * cached at once don't all expire on the same day — see spec 0001.
  */
 export interface TmdbCacheEntry {
+  /**
+   * Version of the processed TMDB metadata picker that produced this entry.
+   * Older entries are refetched synchronously so title-fallback fixes are not
+   * blocked by a still-fresh TTL.
+   */
+  cache_version?: number;
   poster_url: string;
   translation: TmdbTranslationData | null;
   cached_at: number;
