@@ -3150,27 +3150,31 @@ void (async () => {
     );
   }
 
-  // ── Test 60b: strict TMDB keeps original-language title when CN title blank ─
+  // ── Test 60b: strict TMDB keeps original-language title when title blank ─
   console.log(
-    "\n[60b] pickBestTranslation — strict TMDB keeps original-language TV title",
+    "\n[60b] pickBestTranslation — strict TMDB keeps original-language TV titles",
   );
   {
-    const sunsets: TmdbMovieResponse = {
-      poster_path: "/sunsets.jpg",
-      original_name: "钢铁森林",
-      name: "钢铁森林",
-      original_language: "zh",
-      overview: "海州市通河岸边，五年前“8·17”大案的全新线索浮出水面。",
-      genres: [{ id: 18, name: "剧情" }],
+    const makeOriginalLanguageTv = (
+      title: string,
+      originalLanguage: string,
+      exactCountry: string,
+      overview: string,
+    ): TmdbMovieResponse => ({
+      poster_path: "/localized.jpg",
+      original_name: title,
+      name: title,
+      original_language: originalLanguage,
+      overview,
+      genres: [{ id: 18, name: "Drama" }],
       translations: {
         translations: [
           {
-            iso_639_1: "zh",
-            iso_3166_1: "CN",
+            iso_639_1: originalLanguage,
+            iso_3166_1: exactCountry,
             data: {
               name: "",
-              overview:
-                "海州市通河岸边，五年前“8·17”大案的全新线索浮出水面。",
+              overview,
               tagline: "",
             },
           },
@@ -3178,25 +3182,126 @@ void (async () => {
             iso_639_1: "en",
             iso_3166_1: "US",
             data: {
-              name: "Sunsets Secrets Regrets",
+              name: "English Fallback Title",
               overview: "An English overview",
               tagline: "",
             },
           },
         ],
       },
-    };
+    });
 
-    const cnStrict = pickBestTranslation(sunsets, "zh-CN", "tv", "en");
+    const cnStrict = pickBestTranslation(
+      makeOriginalLanguageTv(
+        "钢铁森林",
+        "zh",
+        "CN",
+        "海州市通河岸边，五年前“8·17”大案的全新线索浮出水面。",
+      ),
+      "zh-CN",
+      "tv",
+      "en",
+    );
     assertEq(
       cnStrict?.title,
       "钢铁森林",
-      "strict zh-CN uses top-level original-language title when exact CN title is blank",
+      "strict zh-CN uses top-level original-language title when exact title is blank",
     );
     assertEq(
       cnStrict?.overview,
       "海州市通河岸边，五年前“8·17”大案的全新线索浮出水面。",
       "strict zh-CN keeps exact CN overview",
+    );
+
+    const twStrict = pickBestTranslation(
+      makeOriginalLanguageTv(
+        "鋼鐵森林",
+        "zh",
+        "TW",
+        "故事以海州市通河岸邊的一起無名女屍案開篇。",
+      ),
+      "zh-TW",
+      "tv",
+      "en",
+    );
+    assertEq(
+      twStrict?.title,
+      "鋼鐵森林",
+      "strict zh-TW uses top-level original-language title when exact title is blank",
+    );
+
+    const jaStrict = pickBestTranslation(
+      makeOriginalLanguageTv(
+        "孤独のグルメ",
+        "ja",
+        "JP",
+        "井之頭五郎が食事処を巡る。",
+      ),
+      "ja-JP",
+      "tv",
+      "en",
+    );
+    assertEq(
+      jaStrict?.title,
+      "孤独のグルメ",
+      "strict ja-JP uses top-level original-language title when exact title is blank",
+    );
+
+    const koTopLevelOnly = pickBestTranslation(
+      {
+        poster_path: "/ko.jpg",
+        original_name: "오징어 게임",
+        name: "오징어 게임",
+        original_language: "ko",
+        overview: "456명의 참가자가 생존 게임에 도전한다.",
+        translations: {
+          translations: [
+            {
+              iso_639_1: "en",
+              iso_3166_1: "US",
+              data: {
+                name: "Squid Game",
+                overview: "An English overview",
+                tagline: "",
+              },
+            },
+          ],
+        },
+      },
+      "ko-KR",
+      "tv",
+      "en",
+    );
+    assertEq(
+      koTopLevelOnly?.title,
+      "오징어 게임",
+      "strict ko-KR uses top-level original-language title even without a matching translation row",
+    );
+
+    const missingPrimary = pickBestTranslation(
+      {
+        poster_path: "/some.jpg",
+        original_name: "Some English Show",
+        name: "Some English Show",
+        original_language: "en",
+        translations: {
+          translations: [
+            {
+              iso_639_1: "en",
+              iso_3166_1: "US",
+              data: { name: "Some English Show", overview: "", tagline: "" },
+            },
+          ],
+        },
+      },
+      "zh-CN",
+      "tv",
+      "en",
+    );
+    assertEq(
+      missingPrimary?.title,
+      "Some English Show",
+      "strict zh-CN still falls back to configured fallback when requested language is unavailable",
     );
   }
 

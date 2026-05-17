@@ -472,10 +472,14 @@ export function pickBestTranslation(
     .split("-")[0]
     .toLowerCase();
   const requestedLanguage = (language || "").split("-")[0].toLowerCase();
-  const mainTitleUsableForRequestedLanguage =
+  const mainTitleDiffersFromOriginal =
+    mainTitle.length > 0 && mainTitle !== mainOriginal;
+  const mainTitleMatchesRequestedOriginalLanguage =
     mainTitle.length > 0 &&
-    (mainTitle !== mainOriginal ||
-      (!!requestedLanguage && requestedLanguage === originalLanguage));
+    !!requestedLanguage &&
+    requestedLanguage === originalLanguage;
+  const mainTitleUsableForRequestedLanguage =
+    mainTitleDiffersFromOriginal || mainTitleMatchesRequestedOriginalLanguage;
   const mainGenres = (data.genres || [])
     .map((g) => (g.name || "").trim())
     .filter((n) => n.length > 0);
@@ -491,6 +495,14 @@ export function pickBestTranslation(
       return {
         ...primary,
         title,
+      };
+    }
+    if (mainTitleUsableForRequestedLanguage) {
+      return {
+        title: mainTitle,
+        overview: mainOverview,
+        tagline: mainTagline,
+        genres: mainGenres,
       };
     }
     return (
