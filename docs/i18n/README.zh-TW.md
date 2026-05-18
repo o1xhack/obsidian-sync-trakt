@@ -18,7 +18,7 @@
 - **檔案名跟隨語言** —— 切換元數據語言後，已有筆記會在下次同步自動重命名以匹配新標題；Obsidian 內部連結會自動更新。設定裡也有「立即重命名」按鈕可手動觸發
 - **11 種筆記範本語言** —— 內建手工翻譯的筆記範本，涵蓋 en + zh-CN + zh-TW + ja + ko + fr + de + it + es + pt-BR + ru。在範本語言下拉框裡選擇，隨時切換不會丟失你的自訂內容
 - **Tab 式設定介面** —— 通用 / 筆記 / 同步 / Daily Notes 四個 tab。最後查看的 tab 按裝置記憶
-- **Daily Notes 整合** —— 每次同步自動在你的 Daily Note 中插入當天事件（看了 / 加入想看 / 收藏 / 評分），按時間排序，跟隨你的範本語言。Marker 區間內的內容由外掛管理，**區間之外的內容絕不修改**。**增量模式**（可選）讓你在 marker 區間內手寫的批註也能在每次同步後保留。手動回溯改成日期區間選擇器，配快捷預設（最近 7 天 / 最近 30 天 / 本月 / 上月）。詳見 [spec 0006](../specs/0006-daily-notes-integration.md)
+- **Daily Notes 整合** —— 每次同步自動在你的 Daily Note 中插入當天事件（看了 / 加入想看 / 收藏 / 評分），按時間排序，跟隨你的範本語言。Marker 區間內的內容由外掛管理，**區間之外的內容絕不修改**。**增量模式**（可選）讓你在 marker 區間內手寫的批註也能在每次同步後保留。手動回溯改成日期區間選擇器，配快捷預設（最近 7 天 / 最近 30 天 / 本月 / 上月）。Daily Notes 也可以使用獨立自動同步間隔，不重寫媒體筆記。詳見 [spec 0006](../specs/0006-daily-notes-integration.md) 和 [spec 0011](../specs/0011-daily-notes-auto-sync.md)
 - **增量同步** —— 首次同步把本地 TMDB 快取 + Trakt 歷史狀態填好；之後每次同步只拉變化的部分。穩態同步時間從幾分鐘降到幾秒。詳見 [spec 0001](../specs/0001-incremental-sync.md)
 - **安靜寫盤** —— 同步只重寫**內容真的變了**的筆記。看完一集後，1200 項的影庫只重寫 1 個筆記，而不是 1200 個 —— Obsidian Sync / iCloud / Syncthing 等多裝置同步層不再每次都重傳整個庫。詳見 [spec 0002](../specs/0002-diff-based-write.md)
 - **按設定粒度的雲端開關** —— 每個設定項可單獨決定要不要跨裝置同步。例如 Mac 上每 30 分鐘自動同步、iPhone 上完全關閉 —— 互不打擾。詳見 [spec 0003](../specs/0003-device-local-settings.md)
@@ -88,11 +88,15 @@ trakt_metadata_language: zh-TW
 
 **手動回溯**用日期區間選擇器，配快捷預設（最近 7 天 / 最近 30 天 / 本月 / 上月）。點確認前會即時顯示「該區間內有多少篇 Daily Note 實際存在」。在 **設定 → Daily Notes** 裡配置資料夾和檔案名格式（Moment.js 語法，例如 `YYYY-MM-DD` 或 `YYYY/YYYY.MM.DD`）。詳見 [spec 0006](../specs/0006-daily-notes-integration.md)。
 
+**Daily Notes-only 自動同步**可以和完整媒體筆記自動同步分開開啟。它會刷新 Daily Notes 需要的 Trakt/TMDB 資料並更新已存在的 Daily Note 檔案，但不會建立、重命名、刪除或重寫媒體筆記。Daily-only 定時器和完整同步定時器共用同一個鎖；如果兩個定時器同時觸發，其中一個會跳過，而不是並發寫入。
+
 ## 🔄 多裝置同步
 
 授權狀態（Trakt token、TMDB key、所有設定）保存在 vault 的 `.obsidian/plugins/sync-trakt/data.json` 裡，跟隨你的 vault 同步走。在 Mac 上配一次，透過 Obsidian Sync（勾選 `Plugin data` 同步）、Syncthing、iCloud + 進階資料保護、或 Cryptomator 同步到 iPhone。**外掛不在任何伺服器儲存資料**。
 
-**任何單個設定都可以單獨退出跨裝置同步** —— 設定項旁邊有個小雲朵圖示可以切換（目前已開放給「啟動時同步」、「自動同步」、「自動同步間隔」、「外掛 UI 語言」四項）。適合「Mac 上 30 分鐘自動同步、iPhone 上不要」這種情境。
+大型可重建 runtime 快取（包括 TMDB 元數據快取和詳細觀看歷史聚合）保存在每台裝置自己的 Obsidian 本機應用儲存裡，不會上傳到 Obsidian Sync。某台裝置的本機快取被清掉後，可以從 Trakt/TMDB 重新建立。外掛只同步小型全量刷新協調欄位，用來避免一台裝置已經偵測到 Trakt 端刪除後，另一台裝置繼續用舊本機快取寫詳細歷史。
+
+**任何單個設定都可以單獨退出跨裝置同步** —— 設定項旁邊有個小雲朵圖示可以切換（目前已開放給「啟動時同步」、「自動同步」、「自動同步間隔」、「Daily Notes 自動同步」、「Daily Notes 自動同步間隔」、「外掛 UI 語言」）。適合「Mac 上每隔幾小時同步媒體筆記、每 15 分鐘刷新 Daily Notes，iPhone 上不要自動定時」這種情境。
 
 ## 📊 在 Obsidian Bases 裡檢視影庫
 
@@ -186,6 +190,8 @@ npm run test:i18n  # 跑煙霧測試
 - [x] **0.8** — Daily Notes **增量同步模式**。可選模式：今天的 marker 區間從「全替換」改成「只追加」，這樣你在區間內手寫的批註每次同步都能保留。
 - [x] **0.9** — **元數據語言回退**。在「元數據語言」下方新加「回退語言」下拉。設定後主語言變嚴格匹配（不會再用 zh-TW 湊 zh-CN），命中不到再走回退，最後才退到英文原文。→ [spec 0008](../specs/0008-metadata-language-fallback.md)
 - [x] **1.0** — **檔案名自動重命名 + 持久化「更新說明」彈窗 + 日期區間回溯**。切換元數據語言後，已有筆記下次同步自動重命名（Obsidian 內部連結自動跟隨）。每個新版本首次啟動會彈一次「更新說明」，顯示距上次以來的版本變化。手動回溯改為日期區間選擇器（起始 / 結束 + 快捷預設）。→ [spec 0009](../specs/0009-filename-rename.md)
+- [x] **1.1** — **Vault 輕量化 runtime 快取架構**。大型 TMDB 快取和詳細觀看歷史快取移出 vault，放到本機 runtime storage，讓 Obsidian Sync 裡的 `data.json` 保持小體積，同時保留多裝置重建能力。→ [spec 0010](../specs/0010-local-runtime-cache.md)
+- [x] **1.2** — **Daily Notes-only 自動同步**。Daily Notes 可以使用獨立間隔刷新，不觸發媒體筆記寫入；它復用完整同步的 Trakt/TMDB 資料路徑和同一個同步鎖。→ [spec 0011](../specs/0011-daily-notes-auto-sync.md)
 - [ ] **未來** — 更多 UI 翻譯（目前 en + zh-CN）按需增加；更多 bundled 範本語言可按使用者請求新增
 
 ## 🤝 致謝
