@@ -6,5 +6,6 @@
   "description": "Sync your Trakt.tv watchlist, watch history, favorites, and ratings into Markdown notes — with metadata localization and detailed per-episode watch timestamps.",
   "author": "o1xhack",
   "authorUrl": "https://github.com/o1xhack",
+  "fundingUrl": "https://github.com/sponsors/o1xhack",
   "isDesktopOnly": false
 }

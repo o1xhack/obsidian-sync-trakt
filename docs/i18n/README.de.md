@@ -5,6 +5,8 @@
 [![License](https://img.shields.io/github/license/o1xhack/obsidian-sync-trakt?color=7c3aed)](../../LICENSE)
 [![Min Obsidian version](https://img.shields.io/badge/obsidian-1.8.7%2B-7c3aed)](https://obsidian.md)
 
+[![GitHub Sponsors](https://img.shields.io/badge/sponsor-GitHub%20Sponsors-ea4aaa?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/o1xhack)
+
 **Verwandle deinen [Trakt.tv](https://trakt.tv) Sehverlauf in eine reichhaltig lokalisierte Markdown-Bibliothek — mit episodengenauen Zeitstempeln, Metadaten in 15+ Sprachen und einer leisen inkrementellen Synchronisation, die deinen Vault nicht in Bewegung versetzt.**
 
 > 🌐 [English](../../README.md) · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Français](README.fr.md) · **Deutsch** · [Español](README.es.md) · [Italiano](README.it.md)
