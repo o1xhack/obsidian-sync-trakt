@@ -113,6 +113,69 @@ When localization is enabled, sync resolves translations in this order:
 | Filename template | `{{title}} ({{year}})` | Template for note filenames. Variables: `{{title}}`, `{{year}}`, `{{imdb_id}}`, `{{trakt_id}}`. |
 | Property prefix | `trakt_` | Prefix for all frontmatter properties written by the plugin (e.g. `trakt_title`, `trakt_watched`). Leave blank for no prefix. |
 
+### Bases
+
+The **Bases** tab creates optional Obsidian database-style `.base` files
+that read the properties already stored in your synced media notes. It
+does not run a Trakt sync, change media notes, make network requests, or
+send data anywhere.
+
+Every generated Base opens with a poster-first **Cards** view modeled on
+the library shown in the README: portrait artwork, compact cards,
+one-decimal Trakt ratings, and user-selected properties rather than a raw
+frontmatter dump. A secondary **Details** table uses the same selection
+with poster thumbnails.
+
+| Setting | Default | Description |
+|---|---|---|
+| Bases folder | `Bases` | Folder where generated `.base` files are saved. The folder is created automatically if missing. |
+
+Available generators:
+
+| File | Purpose |
+|---|---|
+| `Movies.base` | Movie notes, filtered by the configured `<prefix>type` property. |
+| `Shows.base` | TV show notes, including the existing show status property. |
+| `Watchlist.base` | Movies and shows where the existing watchlist property is `true`. |
+| `Watched.base` | Movies and shows where the existing watched property is `true`. |
+| `Ratings.base` | Movies and shows with an existing personal rating greater than `0`. |
+| `Trakt Library.base` | The all-in-one movie + TV library. Create it directly with **Create All-in-one Base**, or as part of **Create All Bases**. |
+
+Under **Choose fields shown in each Base**, expand any generator to select
+what appears below each poster and in the Details table. Each Base stores
+its own selection. **Recommended** restores that Base's curated defaults;
+**Select all** exposes every supported property; **Clear** leaves only the
+always-visible poster and note title.
+
+The chooser covers all frontmatter data currently written by the plugin:
+core metadata, tags/tag notes, community and personal ratings, watched,
+watchlist and favorite flags, play counts and activity timestamps, TV
+status and episode counts, movie release details, localized originals,
+IDs, external links, and sync timestamps. TV **Episode progress** is a
+derived display such as `8 / 10 · 80%`, calculated from episodes watched
+and aired episodes. The plugin does not currently store the exact latest
+season/episode number reached, so the Base cannot display that value
+without a future note-schema change.
+
+The presets use view-specific default sorting: Movies and Shows emphasize
+community rating, Watchlist uses the date added, Watched uses the last
+watch timestamp, Ratings uses your personal score, and the complete
+library starts with recent years. These are ordinary Bases views, so you
+can change card size, visible properties, sort order, grouping, or filters
+after generation.
+
+Generated Bases use the current **Notes folder** and **Property prefix**.
+For example, changing the prefix from `trakt_` to `media_` makes the
+generated filters and columns use `media_type`, `media_title`,
+`media_watched`, and the other existing `media_*` properties. Regenerate
+the files after changing either setting.
+
+You can edit generated `.base` files manually in Obsidian. If a target
+file already exists, the plugin asks before overwriting it. Confirming an
+overwrite replaces manual edits in that Base; canceling keeps the
+existing file unchanged. Media notes are never rewritten by the Bases
+helper.
+
 ### Note templates
 
 | Setting | Default | Description |

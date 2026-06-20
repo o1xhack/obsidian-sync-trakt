@@ -28,6 +28,21 @@ import {
   computeLastMonth,
   type DailyNotesHost,
 } from "./daily-notes";
+import {
+  BASE_DISPLAY_FIELD_DEFINITIONS,
+  BASE_FIELD_GROUPS,
+  BASE_FILE_KINDS,
+  BaseFileError,
+  createDefaultBaseDisplayFields,
+  getBaseDisplayFields,
+  getBaseFileDefinitions,
+  getResolvedBaseDisplaySettings,
+  writeBaseFile,
+  type BaseDisplayField,
+  type BaseDisplaySettings,
+  type BaseFieldGroup,
+  type BaseFileKind,
+} from "./bases";
 
 export const POSTER_SIZES = [
   "w92",
@@ -93,6 +108,7 @@ export type ConfirmDangerousActionOptions = {
   title: StringKey;
   body: StringKey;
   confirm: StringKey;
+  vars?: Record<string, string | number>;
 };
 
 class ConfirmDangerousActionModal extends Modal {
@@ -115,10 +131,11 @@ class ConfirmDangerousActionModal extends Modal {
 
   onOpen(): void {
     const { contentEl, titleEl } = this;
-    titleEl.setText(this.translate(this.options.title));
+    titleEl.setText(this.translate(this.options.title, this.options.vars));
 
     const body = contentEl.createDiv({ cls: "trakt-confirm-body" });
-    for (const para of this.translate(this.options.body).split("\n")) {
+    const bodyText = this.translate(this.options.body, this.options.vars);
+    for (const para of bodyText.split("\n")) {
       if (para.trim() === "") continue;
       body.createEl("p", { text: para });
     }
@@ -130,7 +147,7 @@ class ConfirmDangerousActionModal extends Modal {
     cancelBtn.onclick = () => this.finish(false);
 
     const confirmBtn = btnContainer.createEl("button", {
-      text: this.translate(this.options.confirm),
+      text: this.translate(this.options.confirm, this.options.vars),
       cls: "mod-warning",
     });
     confirmBtn.onclick = () => this.finish(true);
@@ -327,6 +344,8 @@ export interface TraktrSettings {
 
   // Folders & file naming
   folder: string;
+  basesFolder: string;
+  basesDisplayFields: BaseDisplaySettings;
   filenameTemplate: string;
 
   // Note templates
@@ -1201,6 +1220,8 @@ export const DEFAULT_SETTINGS: TraktrSettings = {
   propertyPrefix: "trakt_",
 
   folder: "trakt",
+  basesFolder: "Bases",
+  basesDisplayFields: createDefaultBaseDisplayFields(),
   filenameTemplate: "{{title}} ({{year}})",
 
   movieNoteTemplate: DEFAULT_MOVIE_TEMPLATE_EN,
@@ -1253,10 +1274,16 @@ export const DEFAULT_SETTINGS: TraktrSettings = {
  * [0.6.0] Settings page tab ids — see spec 0005. Persisted per-device
  * in localStorage so each Mac/iPhone remembers its own last-viewed tab.
  */
-export type SettingsTabId = "general" | "notes" | "sync" | "daily";
+export type SettingsTabId =
+  | "general"
+  | "notes"
+  | "bases"
+  | "sync"
+  | "daily";
 const SETTINGS_TABS: ReadonlyArray<SettingsTabId> = [
   "general",
   "notes",
+  "bases",
   "sync",
   "daily",
 ];
@@ -1332,6 +1359,287 @@ export class TraktrSettingTab extends PluginSettingTab {
       getTranslator(this.plugin.settings.uiLanguage),
       options,
     );
+  }
+
+  private async generateBases(
+    kinds: ReadonlyArray<BaseFileKind>,
+  ): Promise<void> {
+    const t = getTranslator(this.plugin.settings.uiLanguage);
+    const selected = new Set<BaseFileKind>(kinds);
+    const definitions = getBaseFileDefinitions(this.plugin.settings).filter(
+      (definition) => selected.has(definition.kind),
+    );
+
+    for (const definition of definitions) {
+      try {
+        const result = await writeBaseFile(
+          this.plugin.app,
+          this.plugin.settings.basesFolder,
+          definition,
+          (path) =>
+            this.confirmAction({
+              title: "bases.confirmOverwrite.title",
+              body: "bases.confirmOverwrite.body",
+              confirm: "bases.confirmOverwrite.confirm",
+              vars: { filename: definition.filename, path },
+            }),
+        );
+        const key =
+          result.status === "created"
+            ? "bases.notice.created"
+            : result.status === "updated"
+              ? "bases.notice.updated"
+              : "bases.notice.skipped";
+        new Notice(
+          t(key, { filename: definition.filename, path: result.path }),
+          5000,
+        );
+      } catch (error) {
+        const msg =
+          error instanceof BaseFileError
+            ? t(
+                error.code === "folder_path_is_file"
+                  ? "bases.error.folderPathIsFile"
+                  : "bases.error.targetIsNotFile",
+                { path: error.path },
+              )
+            : error instanceof Error
+              ? error.message
+              : String(error);
+        new Notice(
+          t("bases.notice.failed", { filename: definition.filename, msg }),
+          10000,
+        );
+      }
+    }
+  }
+
+  private async setBaseDisplayFields(
+    kind: BaseFileKind,
+    fields: ReadonlyArray<BaseDisplayField>,
+  ): Promise<void> {
+    const selected = new Set(fields);
+    const canonical = BASE_DISPLAY_FIELD_DEFINITIONS.filter((field) =>
+      selected.has(field.id),
+    ).map((field) => field.id);
+    this.plugin.settings.basesDisplayFields = {
+      ...getResolvedBaseDisplaySettings(this.plugin.settings),
+      [kind]: canonical,
+    };
+    await this.plugin.saveSettings();
+  }
+
+  private baseKindNameKey(kind: BaseFileKind): StringKey {
+    const keys: Record<BaseFileKind, StringKey> = {
+      library: "bases.library.name",
+      movies: "bases.movies.name",
+      shows: "bases.shows.name",
+      watchlist: "bases.watchlist.name",
+      watched: "bases.watched.name",
+      ratings: "bases.ratings.name",
+    };
+    return keys[kind];
+  }
+
+  private baseFieldGroupKey(group: BaseFieldGroup): StringKey {
+    const keys: Record<BaseFieldGroup, StringKey> = {
+      core: "bases.group.core",
+      ratings: "bases.group.ratings",
+      activity: "bases.group.activity",
+      progress: "bases.group.progress",
+      release: "bases.group.release",
+      localization: "bases.group.localization",
+      links: "bases.group.links",
+      sync: "bases.group.sync",
+    };
+    return keys[group];
+  }
+
+  private renderBaseFieldChooser(
+    containerEl: HTMLElement,
+    kind: BaseFileKind,
+    t: ReturnType<typeof getTranslator>,
+  ): void {
+    const details = containerEl.createEl("details", {
+      cls: "trakt-bases-field-panel",
+    });
+    const summary = details.createEl("summary");
+    summary.createSpan({ text: t(this.baseKindNameKey(kind)) });
+    const countEl = summary.createSpan({ cls: "trakt-bases-field-count" });
+    const controls = details.createDiv({ cls: "trakt-bases-field-controls" });
+    const checkboxes = new Map<BaseDisplayField, HTMLInputElement>();
+    let selected = new Set(getBaseDisplayFields(this.plugin.settings, kind));
+
+    const updateCount = (): void => {
+      countEl.setText(
+        t("bases.fields.selectedCount", { count: selected.size }),
+      );
+    };
+
+    const applySelection = async (
+      fields: ReadonlyArray<BaseDisplayField>,
+    ): Promise<void> => {
+      selected = new Set(fields);
+      for (const [id, checkbox] of checkboxes) {
+        checkbox.checked = selected.has(id);
+      }
+      updateCount();
+      await this.setBaseDisplayFields(kind, fields);
+    };
+
+    const addPresetButton = (
+      label: StringKey,
+      fields: () => ReadonlyArray<BaseDisplayField>,
+    ): void => {
+      const button = controls.createEl("button", { text: t(label) });
+      button.onclick = () => {
+        void applySelection(fields());
+      };
+    };
+
+    addPresetButton(
+      "bases.fields.recommended",
+      () => createDefaultBaseDisplayFields()[kind],
+    );
+    addPresetButton(
+      "bases.fields.all",
+      () => BASE_DISPLAY_FIELD_DEFINITIONS.map((field) => field.id),
+    );
+    addPresetButton("bases.fields.none", () => []);
+
+    for (const group of BASE_FIELD_GROUPS) {
+      const groupFields = BASE_DISPLAY_FIELD_DEFINITIONS.filter(
+        (field) => field.group === group,
+      );
+      const section = details.createDiv({ cls: "trakt-bases-field-section" });
+      section.createDiv({
+        cls: "trakt-bases-field-section-title",
+        text: t(this.baseFieldGroupKey(group)),
+      });
+      const grid = section.createDiv({ cls: "trakt-bases-field-grid" });
+
+      for (const field of groupFields) {
+        const label = grid.createEl("label", {
+          cls: "trakt-bases-field-option",
+        });
+        const checkbox = label.createEl("input", { type: "checkbox" });
+        checkbox.checked = selected.has(field.id);
+        checkboxes.set(field.id, checkbox);
+        label.createSpan({ text: t(field.labelKey) });
+        checkbox.onchange = () => {
+          if (checkbox.checked) selected.add(field.id);
+          else selected.delete(field.id);
+          updateCount();
+          void this.setBaseDisplayFields(kind, [...selected]);
+        };
+      }
+    }
+
+    updateCount();
+  }
+
+  private renderBasesTab(
+    containerEl: HTMLElement,
+    t: ReturnType<typeof getTranslator>,
+  ): void {
+    new Setting(containerEl)
+      .setName(t("bases.heading"))
+      .setDesc(t("bases.help"))
+      .setHeading();
+
+    new Setting(containerEl)
+      .setName(t("bases.folder.name"))
+      .setDesc(t("bases.folder.desc"))
+      .addText((text) =>
+        text
+          .setPlaceholder("Bases")
+          .setValue(this.plugin.settings.basesFolder)
+          .onChange(async (value) => {
+            this.plugin.settings.basesFolder = value.trim();
+            await this.plugin.saveSettings();
+          }),
+      );
+
+    const addCreateRow = (
+      name: StringKey,
+      desc: StringKey,
+      buttonText: StringKey,
+      kinds: ReadonlyArray<BaseFileKind>,
+      cta = false,
+    ): void => {
+      new Setting(containerEl)
+        .setName(t(name))
+        .setDesc(t(desc))
+        .addButton((btn) => {
+          btn.setButtonText(t(buttonText));
+          if (cta) btn.setCta();
+          btn.onClick(async () => {
+            btn.setDisabled(true);
+            try {
+              await this.generateBases(kinds);
+            } finally {
+              btn.setDisabled(false);
+            }
+          });
+        });
+    };
+
+    new Setting(containerEl)
+      .setName(t("bases.fields.heading"))
+      .setDesc(t("bases.fields.desc"))
+      .setHeading();
+
+    for (const kind of BASE_FILE_KINDS) {
+      this.renderBaseFieldChooser(containerEl, kind, t);
+    }
+
+    new Setting(containerEl).setName(t("bases.actions.heading")).setHeading();
+
+    addCreateRow(
+      "bases.library.name",
+      "bases.library.desc",
+      "bases.createLibrary",
+      ["library"],
+      true,
+    );
+    addCreateRow(
+      "bases.movies.name",
+      "bases.movies.desc",
+      "bases.createMovies",
+      ["movies"],
+    );
+    addCreateRow(
+      "bases.shows.name",
+      "bases.shows.desc",
+      "bases.createShows",
+      ["shows"],
+    );
+    addCreateRow(
+      "bases.watchlist.name",
+      "bases.watchlist.desc",
+      "bases.createWatchlist",
+      ["watchlist"],
+    );
+    addCreateRow(
+      "bases.watched.name",
+      "bases.watched.desc",
+      "bases.createWatched",
+      ["watched"],
+    );
+    addCreateRow(
+      "bases.ratings.name",
+      "bases.ratings.desc",
+      "bases.createRatings",
+      ["ratings"],
+    );
+    addCreateRow(
+      "bases.all.name",
+      "bases.all.desc",
+      "bases.createAll",
+      ["movies", "shows", "watchlist", "watched", "ratings", "library"],
+      true,
+    );
+
   }
 
   /**
@@ -1625,6 +1933,11 @@ export class TraktrSettingTab extends PluginSettingTab {
 
     if (this.activeTab === "daily") {
       this.renderDailyNotesTab(containerEl, t);
+      return;
+    }
+
+    if (this.activeTab === "bases") {
+      this.renderBasesTab(containerEl, t);
       return;
     }
 

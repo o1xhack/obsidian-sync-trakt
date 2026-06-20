@@ -16,11 +16,277 @@ export const STRINGS = {
   // ── [0.6.0] Settings page tab labels ──
   "tabs.general": { en: "General", "zh-CN": "通用" },
   "tabs.notes":   { en: "Notes",   "zh-CN": "笔记" },
+  "tabs.bases":   { en: "Bases",   "zh-CN": "Bases 视图" },
   "tabs.sync":    { en: "Sync",    "zh-CN": "同步" },
   "tabs.daily":   { en: "Daily Notes", "zh-CN": "日记" },
   "tabs.daily.placeholder": {
     en: "Daily Notes integration coming in 0.7.0.",
     "zh-CN": "Daily Notes 集成功能将在 0.7.0 版本提供。",
+  },
+
+  // ── Obsidian Bases setup helper (spec 0012) ──
+  "bases.heading": { en: "Obsidian Bases", "zh-CN": "Obsidian Bases" },
+  "bases.help": {
+    en: "Bases are optional database-style views that use the properties already stored in your Trakt media notes. Each preset includes a poster-first Cards view with formatted ratings and useful sorting, plus a compact Details table. Generating them does not run a sync, change notes, send data, or make network requests. Regenerate them after changing note settings or the property prefix. You can edit generated .base files manually; confirming an overwrite will replace those edits.",
+    "zh-CN":
+      "Bases 是可选的数据库式视图，直接使用 Trakt 媒体笔记中已有的属性。每个预设都包含以海报为主的卡片视图（带格式化评分和实用排序），以及紧凑的详情表格。生成 Base 不会运行同步、修改笔记、发送数据或发起网络请求。更改笔记设置或属性前缀后可以重新生成。生成的 .base 文件可以手动编辑；确认覆盖时，这些手动修改会被替换。",
+  },
+  "bases.folder.name": { en: "Bases folder", "zh-CN": "Bases 文件夹" },
+  "bases.folder.desc": {
+    en: "Folder where generated .base files will be saved.",
+    "zh-CN": "生成的 .base 文件保存到此文件夹。",
+  },
+  "bases.actions.heading": { en: "Create Bases", "zh-CN": "创建 Bases" },
+  "bases.library.name": {
+    en: "All-in-one Library Base",
+    "zh-CN": "一体化影库 Base",
+  },
+  "bases.library.desc": {
+    en: "One combined library containing movies and TV shows, with optional watched, watchlist, ratings, episode progress, and any other selected fields.",
+    "zh-CN":
+      "把电影和剧集合并到一个影库中，并可显示已观看、想看、评分、剧集进度和其他自选字段。",
+  },
+  "bases.movies.name": { en: "Movies Base", "zh-CN": "电影 Base" },
+  "bases.movies.desc": {
+    en: "Movie notes with title, year, ratings, genres, watched/watchlist status, and poster URL.",
+    "zh-CN": "显示电影笔记的标题、年份、评分、类型、已观看/想看状态和海报 URL。",
+  },
+  "bases.shows.name": { en: "Shows Base", "zh-CN": "剧集 Base" },
+  "bases.shows.desc": {
+    en: "TV show notes with status, ratings, genres, watched/watchlist status, and poster URL.",
+    "zh-CN": "显示剧集笔记的状态、评分、类型、已观看/想看状态和海报 URL。",
+  },
+  "bases.watchlist.name": { en: "Watchlist Base", "zh-CN": "想看 Base" },
+  "bases.watchlist.desc": {
+    en: "Movies and shows currently marked as watchlist items.",
+    "zh-CN": "显示当前标记为想看的电影和剧集。",
+  },
+  "bases.watched.name": { en: "Watched Base", "zh-CN": "已观看 Base" },
+  "bases.watched.desc": {
+    en: "Movies and shows currently marked as watched.",
+    "zh-CN": "显示当前标记为已观看的电影和剧集。",
+  },
+  "bases.ratings.name": { en: "Ratings Base", "zh-CN": "个人评分 Base" },
+  "bases.ratings.desc": {
+    en: "Movies and shows with a personal rating greater than zero.",
+    "zh-CN": "显示个人评分大于零的电影和剧集。",
+  },
+  "bases.all.name": { en: "All Bases", "zh-CN": "全部 Bases" },
+  "bases.all.desc": {
+    en: "Create all five focused views plus Trakt Library.base for the complete media-note folder.",
+    "zh-CN": "创建五个分类视图，并额外创建覆盖整个媒体笔记文件夹的 Trakt Library.base。",
+  },
+  "bases.createMovies": {
+    en: "Create Movies Base",
+    "zh-CN": "创建电影 Base",
+  },
+  "bases.createShows": {
+    en: "Create Shows Base",
+    "zh-CN": "创建剧集 Base",
+  },
+  "bases.createWatchlist": {
+    en: "Create Watchlist Base",
+    "zh-CN": "创建想看 Base",
+  },
+  "bases.createWatched": {
+    en: "Create Watched Base",
+    "zh-CN": "创建已观看 Base",
+  },
+  "bases.createRatings": {
+    en: "Create Ratings Base",
+    "zh-CN": "创建个人评分 Base",
+  },
+  "bases.createLibrary": {
+    en: "Create All-in-one Base",
+    "zh-CN": "创建一体化 Base",
+  },
+  "bases.createAll": {
+    en: "Create All Bases",
+    "zh-CN": "创建全部 Bases",
+  },
+  "bases.fields.heading": {
+    en: "Choose fields shown in each Base",
+    "zh-CN": "选择每个 Base 显示的字段",
+  },
+  "bases.fields.desc": {
+    en: "Poster and title are always shown. Choose the properties displayed under each poster and in its Details table, then create or regenerate that Base. Episode progress is calculated from episodes watched versus aired episodes; the plugin does not currently store the latest episode number reached.",
+    "zh-CN":
+      "海报和标题始终显示。选择海报下方和详情表格中显示的属性，然后创建或重新生成对应的 Base。剧集进度根据已观看集数和已播集数计算；插件目前不会保存“看到第几集”的具体集号。",
+  },
+  "bases.fields.selectedCount": {
+    en: "{count} selected",
+    "zh-CN": "已选择 {count} 项",
+  },
+  "bases.fields.recommended": {
+    en: "Recommended",
+    "zh-CN": "推荐",
+  },
+  "bases.fields.all": { en: "Select all", "zh-CN": "全选" },
+  "bases.fields.none": { en: "Clear", "zh-CN": "清空" },
+  "bases.group.core": { en: "Core metadata", "zh-CN": "核心元数据" },
+  "bases.group.ratings": { en: "Ratings", "zh-CN": "评分" },
+  "bases.group.activity": {
+    en: "Viewing activity",
+    "zh-CN": "观看活动",
+  },
+  "bases.group.progress": {
+    en: "TV progress",
+    "zh-CN": "剧集进度",
+  },
+  "bases.group.release": {
+    en: "Release details",
+    "zh-CN": "发行信息",
+  },
+  "bases.group.localization": {
+    en: "Localization",
+    "zh-CN": "本地化",
+  },
+  "bases.group.links": { en: "IDs and links", "zh-CN": "ID 与链接" },
+  "bases.group.sync": {
+    en: "Sync metadata",
+    "zh-CN": "同步元数据",
+  },
+  "bases.view.posters": { en: "Posters", "zh-CN": "海报" },
+  "bases.view.details": { en: "Details", "zh-CN": "详情" },
+  "bases.value.watched": { en: "✓ Watched", "zh-CN": "✓ 已观看" },
+  "bases.value.watchlist": { en: "＋ Watchlist", "zh-CN": "＋ 想看" },
+  "bases.field.title": { en: "Title", "zh-CN": "标题" },
+  "bases.field.poster": { en: "Poster", "zh-CN": "海报" },
+  "bases.field.posterUrl": { en: "Poster URL", "zh-CN": "海报 URL" },
+  "bases.field.type": { en: "Media type", "zh-CN": "媒体类型" },
+  "bases.field.year": { en: "Year", "zh-CN": "年份" },
+  "bases.field.genres": { en: "Genres", "zh-CN": "类型" },
+  "bases.field.overview": { en: "Overview", "zh-CN": "简介" },
+  "bases.field.runtime": { en: "Runtime", "zh-CN": "时长" },
+  "bases.field.certification": {
+    en: "Certification",
+    "zh-CN": "分级",
+  },
+  "bases.field.country": { en: "Country", "zh-CN": "国家/地区" },
+  "bases.field.language": { en: "Language", "zh-CN": "语言" },
+  "bases.field.tags": { en: "Tags", "zh-CN": "标签" },
+  "bases.field.tagNotes": { en: "Tag notes", "zh-CN": "标签笔记" },
+  "bases.field.communityRating": {
+    en: "Trakt rating",
+    "zh-CN": "Trakt 评分",
+  },
+  "bases.field.votes": { en: "Trakt votes", "zh-CN": "Trakt 投票数" },
+  "bases.field.personalRating": {
+    en: "My rating",
+    "zh-CN": "我的评分",
+  },
+  "bases.field.libraryStatus": {
+    en: "Watched / watchlist status",
+    "zh-CN": "已观看 / 想看状态",
+  },
+  "bases.field.watched": { en: "Watched", "zh-CN": "已观看" },
+  "bases.field.watchlist": { en: "Watchlist", "zh-CN": "想看" },
+  "bases.field.favorite": { en: "Favorite", "zh-CN": "收藏" },
+  "bases.field.plays": { en: "Play count", "zh-CN": "播放次数" },
+  "bases.field.lastWatched": {
+    en: "Last watched",
+    "zh-CN": "最近观看",
+  },
+  "bases.field.watchlistAdded": {
+    en: "Added to watchlist",
+    "zh-CN": "加入想看时间",
+  },
+  "bases.field.favoritedAt": {
+    en: "Favorited at",
+    "zh-CN": "收藏时间",
+  },
+  "bases.field.ratedAt": { en: "Rated at", "zh-CN": "评分时间" },
+  "bases.field.episodeProgress": {
+    en: "Episode progress",
+    "zh-CN": "剧集进度",
+  },
+  "bases.field.episodesWatched": {
+    en: "Episodes watched",
+    "zh-CN": "已观看集数",
+  },
+  "bases.field.airedEpisodes": {
+    en: "Aired episodes",
+    "zh-CN": "已播集数",
+  },
+  "bases.field.showStatus": { en: "Show status", "zh-CN": "剧集状态" },
+  "bases.field.network": { en: "Network", "zh-CN": "电视网" },
+  "bases.field.firstAired": {
+    en: "First aired",
+    "zh-CN": "首播日期",
+  },
+  "bases.field.released": { en: "Release date", "zh-CN": "上映日期" },
+  "bases.field.tagline": { en: "Tagline", "zh-CN": "标语" },
+  "bases.field.originalTitle": {
+    en: "Original title",
+    "zh-CN": "原始标题",
+  },
+  "bases.field.originalOverview": {
+    en: "Original overview",
+    "zh-CN": "原始简介",
+  },
+  "bases.field.originalTagline": {
+    en: "Original tagline",
+    "zh-CN": "原始标语",
+  },
+  "bases.field.originalGenres": {
+    en: "Original genres",
+    "zh-CN": "原始类型",
+  },
+  "bases.field.metadataLanguage": {
+    en: "Metadata language",
+    "zh-CN": "元数据语言",
+  },
+  "bases.field.traktId": { en: "Trakt ID", "zh-CN": "Trakt ID" },
+  "bases.field.slug": { en: "Trakt slug", "zh-CN": "Trakt slug" },
+  "bases.field.imdbId": { en: "IMDB ID", "zh-CN": "IMDB ID" },
+  "bases.field.tmdbId": { en: "TMDB ID", "zh-CN": "TMDB ID" },
+  "bases.field.tvdbId": { en: "TVDB ID", "zh-CN": "TVDB ID" },
+  "bases.field.traktUrl": { en: "Trakt URL", "zh-CN": "Trakt URL" },
+  "bases.field.imdbUrl": { en: "IMDB URL", "zh-CN": "IMDB URL" },
+  "bases.field.syncedAt": {
+    en: "Last note change",
+    "zh-CN": "笔记最近变更",
+  },
+  "bases.field.communityStatsSyncedAt": {
+    en: "Community stats updated",
+    "zh-CN": "社区评分更新时间",
+  },
+  "bases.confirmOverwrite.title": {
+    en: "Overwrite existing Base?",
+    "zh-CN": "覆盖已有 Base？",
+  },
+  "bases.confirmOverwrite.body": {
+    en: "{filename} already exists at {path}.\nOverwriting it will replace any manual edits in that Base. Existing media notes are not changed.",
+    "zh-CN":
+      "{filename} 已存在于 {path}。\n覆盖会替换该 Base 中的所有手动修改，但不会更改已有媒体笔记。",
+  },
+  "bases.confirmOverwrite.confirm": {
+    en: "Overwrite",
+    "zh-CN": "覆盖",
+  },
+  "bases.notice.created": {
+    en: "Sync Trakt: created {filename} at {path}.",
+    "zh-CN": "Sync Trakt：已在 {path} 创建 {filename}。",
+  },
+  "bases.notice.updated": {
+    en: "Sync Trakt: updated {filename} at {path}.",
+    "zh-CN": "Sync Trakt：已在 {path} 更新 {filename}。",
+  },
+  "bases.notice.skipped": {
+    en: "Sync Trakt: kept the existing {filename}; no changes were made.",
+    "zh-CN": "Sync Trakt：已保留现有 {filename}，未进行修改。",
+  },
+  "bases.notice.failed": {
+    en: "Sync Trakt: failed to create {filename} — {msg}",
+    "zh-CN": "Sync Trakt：无法创建 {filename} — {msg}",
+  },
+  "bases.error.folderPathIsFile": {
+    en: "A file already exists where the folder should be: {path}",
+    "zh-CN": "目标文件夹路径已被文件占用：{path}",
+  },
+  "bases.error.targetIsNotFile": {
+    en: "The target path is not a writable file: {path}",
+    "zh-CN": "目标路径不是可写文件：{path}",
   },
 
   // ── [0.7.0] Daily Notes integration (spec 0006) ──

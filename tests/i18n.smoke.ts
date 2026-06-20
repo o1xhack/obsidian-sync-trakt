@@ -121,6 +121,15 @@ import {
   syncedPayloadContainsRuntimeData,
   RUNTIME_STORAGE_SCHEMA_VERSION,
 } from "../src/runtime-store";
+import {
+  BASE_DISPLAY_FIELD_DEFINITIONS,
+  BASE_PROPERTY_KEYS,
+  buildBasePropertyName,
+  createDefaultBaseDisplayFields,
+  getBaseDisplayFields,
+  getBaseFileDefinitions,
+  writeBaseFile,
+} from "../src/bases";
 
 let failures = 0;
 let passes = 0;
@@ -2460,7 +2469,13 @@ void (async () => {
   // ── Test 45: spec 0005 tab labels ─────────────────────────────────────
   console.log("\n[45] tab labels resolve in both UI languages");
   {
-    const tabs = ["tabs.general", "tabs.notes", "tabs.sync", "tabs.daily"];
+    const tabs = [
+      "tabs.general",
+      "tabs.notes",
+      "tabs.bases",
+      "tabs.sync",
+      "tabs.daily",
+    ];
     for (const key of tabs) {
       const enLabel = t(key, "en");
       const zhLabel = t(key, "zh-CN");
@@ -2953,6 +2968,10 @@ void (async () => {
       "daily.today.noFile",
       "daily.today.unchanged",
       "daily.disabled",
+      "bases.notice.created",
+      "bases.notice.updated",
+      "bases.notice.skipped",
+      "bases.notice.failed",
     ] as const;
     for (const k of noticeKeys) {
       const enMsg = t(k, "en");
@@ -2987,6 +3006,9 @@ void (async () => {
       "confirm.reset.title",
       "confirm.reset.body",
       "confirm.reset.confirm",
+      "bases.confirmOverwrite.title",
+      "bases.confirmOverwrite.body",
+      "bases.confirmOverwrite.confirm",
     ] as const;
     for (const k of confirmKeys) {
       const enMsg = t(k, "en");
@@ -4855,6 +4877,401 @@ void (async () => {
       result.items[0].watch_history_episodes?.[0]?.season,
       0,
       "repaired item keeps the S00 history",
+    );
+  }
+
+  console.log("\n[75] Bases setup helper generation");
+  {
+    const settings = withSettings({
+      folder: "Media/Trakt",
+      propertyPrefix: "media_",
+    });
+    const definitions = getBaseFileDefinitions(settings);
+    const filenames = definitions.map((definition) => definition.filename);
+    const allContent = definitions
+      .map((definition) => definition.content)
+      .join("\n");
+
+    assertEq(
+      buildBasePropertyName("media_", "title"),
+      "media_title",
+      "property helper respects a custom prefix",
+    );
+    assertEq(
+      filenames,
+      [
+        "Movies.base",
+        "Shows.base",
+        "Watchlist.base",
+        "Watched.base",
+        "Ratings.base",
+        "Trakt Library.base",
+      ],
+      "all expected .base filenames are generated in stable order",
+    );
+    assertEq(
+      definitions.map((definition) => definition.content),
+      getBaseFileDefinitions(settings).map(
+        (definition) => definition.content,
+      ),
+      "generated Base YAML is deterministic",
+    );
+    assertTrue(
+      !allContent.includes("trakt_"),
+      "custom-prefix generation never hardcodes trakt_",
+    );
+    assertContains(
+      allContent,
+      "media_type",
+      "generated filters use the custom-prefixed media type field",
+    );
+    assertContains(
+      allContent,
+      "media_poster_url",
+      "generated views include the existing poster URL field",
+    );
+    assertContains(
+      allContent,
+      "- type: cards",
+      "every generated Base includes a poster-first Cards view",
+    );
+    assertContains(
+      allContent,
+      "image: formula.poster",
+      "Cards use the generated poster image formula",
+    );
+    assertContains(
+      allContent,
+      "imageAspectRatio: 1.5",
+      "Cards use a portrait poster aspect ratio",
+    );
+    assertContains(
+      allContent,
+      ".toFixed(1)",
+      "community ratings are formatted to one decimal place",
+    );
+    assertContains(
+      allContent,
+      "rowHeight: medium",
+      "each Base includes a compact secondary details table",
+    );
+    for (const definition of definitions) {
+      assertContains(
+        definition.content,
+        "- type: cards",
+        `${definition.filename} opens with a Cards view`,
+      );
+      assertContains(
+        definition.content,
+        "- type: table",
+        `${definition.filename} also includes a details table`,
+      );
+      assertContains(
+        definition.content,
+        "image: formula.poster",
+        `${definition.filename} uses poster artwork`,
+      );
+    }
+    assertContains(
+      definitions.find((definition) => definition.kind === "ratings")
+        ?.content ?? "",
+      "> 0",
+      "Ratings.base filters for a positive personal rating",
+    );
+    const libraryContent =
+      definitions.find((definition) => definition.kind === "library")
+        ?.content ?? "";
+    assertNotContains(
+      libraryContent,
+      '== "movie"',
+      "all-in-one Base does not restrict results to movies",
+    );
+    assertNotContains(
+      libraryContent,
+      '== "show"',
+      "all-in-one Base does not restrict results to shows",
+    );
+    assertContains(
+      libraryContent,
+      "formula.library_status",
+      "all-in-one Base shows watched/watchlist state by default",
+    );
+    assertContains(
+      libraryContent,
+      "formula.episode_progress",
+      "all-in-one Base shows TV progress by default",
+    );
+
+    const comprehensiveShow: NormalizedItem = {
+      type: "show",
+      title: "Example Show",
+      year: 2026,
+      ids: {
+        trakt: 123,
+        slug: "example-show",
+        imdb: "tt123",
+        tmdb: 456,
+        tvdb: 789,
+      },
+      overview: "Example overview",
+      genres: ["Drama"],
+      runtime: 45,
+      rating: 8.2,
+      votes: 100,
+      certification: "TV-14",
+      country: "us",
+      language: "en",
+      status: "returning series",
+      watchlist: true,
+      watchlist_added_at: "2026-05-01T10:00:00.000Z",
+      watched: true,
+      plays: 3,
+      last_watched_at: "2026-05-02T10:00:00.000Z",
+      episodes_watched: 8,
+      favorite: true,
+      favorited_at: "2026-05-02T11:00:00.000Z",
+      my_rating: 9,
+      rated_at: "2026-05-03T10:00:00.000Z",
+      network: "Example Network",
+      aired_episodes: 10,
+      first_aired: "2026-01-05T00:00:00.000Z",
+      poster_url: "https://example.com/show-poster.jpg",
+      originalTitle: "Example Show",
+      originalOverview: "Example overview",
+      originalGenres: ["Drama"],
+    };
+    const comprehensiveMovie: NormalizedItem = {
+      type: "movie",
+      title: "Example Movie",
+      year: 2025,
+      ids: {
+        trakt: 321,
+        slug: "example-movie",
+        imdb: "tt321",
+        tmdb: 654,
+      },
+      overview: "Example movie overview",
+      genres: ["Thriller"],
+      runtime: 110,
+      rating: 7.8,
+      votes: 250,
+      certification: "PG-13",
+      country: "gb",
+      language: "en",
+      status: "released",
+      released: "2025-10-10",
+      tagline: "An example tagline",
+      poster_url: "https://example.com/movie-poster.jpg",
+      watchlist: true,
+      watchlist_added_at: "2026-04-01T10:00:00.000Z",
+      watched: true,
+      plays: 2,
+      last_watched_at: "2026-04-02T10:00:00.000Z",
+      favorite: true,
+      favorited_at: "2026-04-02T11:00:00.000Z",
+      my_rating: 8,
+      rated_at: "2026-04-03T10:00:00.000Z",
+      originalTitle: "Example Movie",
+      originalOverview: "Example movie overview",
+      originalTagline: "An example tagline",
+      originalGenres: ["Thriller"],
+    };
+    const comprehensiveSettings = withSettings({
+      folder: "Media/Trakt",
+      propertyPrefix: "media_",
+      metadataLanguage: "zh-CN",
+      addTags: true,
+      addTagNotes: true,
+    });
+    const frontmatterKeys = new Set([
+      ...Object.keys(
+        buildFrontmatterData(comprehensiveShow, comprehensiveSettings, {
+          communityStatsSyncedAt: "2026-05-20T12:00:00.000Z",
+        }),
+      ),
+      ...Object.keys(
+        buildFrontmatterData(comprehensiveMovie, comprehensiveSettings, {
+          communityStatsSyncedAt: "2026-05-20T12:00:00.000Z",
+        }),
+      ),
+    ]);
+    for (const key of BASE_PROPERTY_KEYS) {
+      const property = buildBasePropertyName(settings.propertyPrefix, key);
+      assertTrue(
+        frontmatterKeys.has(property),
+        `${property} is produced by movie or show frontmatter`,
+      );
+    }
+
+    const generatedProperties = new Set(
+      allContent.match(/media_[a-z_]+/g) ?? [],
+    );
+    for (const property of generatedProperties) {
+      assertTrue(
+        frontmatterKeys.has(property),
+        `${property} referenced by generated Bases exists in rendered frontmatter`,
+      );
+    }
+
+    const customFields = createDefaultBaseDisplayFields();
+    customFields.movies = ["episode_progress", "watched"];
+    const customSettings = withSettings({
+      folder: "Media/Trakt",
+      propertyPrefix: "media_",
+      basesDisplayFields: customFields,
+    });
+    assertEq(
+      getBaseDisplayFields(customSettings, "movies"),
+      ["watched", "episode_progress"],
+      "per-Base selections are normalized to the shared field order",
+    );
+    const customMovieContent =
+      getBaseFileDefinitions(customSettings).find(
+        (definition) => definition.kind === "movies",
+      )?.content ?? "";
+    const cardStart = customMovieContent.indexOf("  - type: cards");
+    const tableStart = customMovieContent.indexOf("  - type: table");
+    const customMovieCards = customMovieContent.slice(cardStart, tableStart);
+    const cardOrderEnd = customMovieCards.indexOf("    sort:");
+    const customMovieCardOrder = customMovieCards.slice(0, cardOrderEnd);
+    assertContains(
+      customMovieCardOrder,
+      '"media_watched"',
+      "selected watched state appears under movie cards",
+    );
+    assertContains(
+      customMovieCardOrder,
+      '"formula.episode_progress"',
+      "selected episode progress appears under movie cards",
+    );
+    assertNotContains(
+      customMovieCardOrder,
+      '"media_year"',
+      "unselected year is omitted from movie cards",
+    );
+    assertNotContains(
+      customMovieCardOrder,
+      '"formula.community_rating"',
+      "unselected rating is omitted from movie cards",
+    );
+
+    const baseStringKeys = [
+      "bases.heading",
+      "bases.help",
+      "bases.folder.name",
+      "bases.folder.desc",
+      "bases.library.name",
+      "bases.library.desc",
+      "bases.createLibrary",
+      "bases.createMovies",
+      "bases.createShows",
+      "bases.createWatchlist",
+      "bases.createWatched",
+      "bases.createRatings",
+      "bases.createAll",
+      "bases.fields.heading",
+      "bases.fields.desc",
+      "bases.fields.selectedCount",
+      "bases.fields.recommended",
+      "bases.fields.all",
+      "bases.fields.none",
+      "bases.confirmOverwrite.title",
+      "bases.confirmOverwrite.body",
+      "bases.confirmOverwrite.confirm",
+      "bases.notice.created",
+      "bases.notice.updated",
+      "bases.notice.skipped",
+      "bases.notice.failed",
+    ] as const;
+    for (const key of baseStringKeys) {
+      assertTrue(
+        !t(key, "en").startsWith("bases."),
+        `en: ${key} resolves`,
+      );
+      assertTrue(
+        !t(key, "zh-CN").startsWith("bases."),
+        `zh-CN: ${key} resolves`,
+      );
+    }
+    for (const field of BASE_DISPLAY_FIELD_DEFINITIONS) {
+      assertTrue(
+        !t(field.labelKey, "en").startsWith("bases."),
+        `en: ${field.labelKey} resolves`,
+      );
+      assertTrue(
+        !t(field.labelKey, "zh-CN").startsWith("bases."),
+        `zh-CN: ${field.labelKey} resolves`,
+      );
+    }
+
+    const stub = await import("./stub-obsidian");
+    const entries = new Map<
+      string,
+      InstanceType<typeof stub.TFile> | InstanceType<typeof stub.TFolder>
+    >();
+    const contents = new Map<string, string>();
+    const vault = {
+      getAbstractFileByPath(path: string) {
+        return entries.get(path) ?? null;
+      },
+      async createFolder(path: string) {
+        const folder = new stub.TFolder();
+        folder.path = path;
+        entries.set(path, folder);
+      },
+      async create(path: string, content: string) {
+        const file = new stub.TFile();
+        file.path = path;
+        file.name = path.split("/").pop() ?? path;
+        file.extension = "base";
+        entries.set(path, file);
+        contents.set(path, content);
+        return file;
+      },
+      async modify(file: InstanceType<typeof stub.TFile>, content: string) {
+        contents.set(file.path, content);
+      },
+    };
+    const app = { vault } as never;
+    const definition = definitions[0];
+    const created = await writeBaseFile(
+      app,
+      "Generated/Bases",
+      definition,
+      async () => false,
+    );
+    assertEq(created.status, "created", "new Base file is created");
+    assertTrue(
+      entries.get("Generated") instanceof stub.TFolder &&
+        entries.get("Generated/Bases") instanceof stub.TFolder,
+      "nested Bases folder is created through vault APIs",
+    );
+
+    const originalContent = contents.get(created.path);
+    const skipped = await writeBaseFile(
+      app,
+      "Generated/Bases",
+      { ...definition, content: "replacement\n" },
+      async () => false,
+    );
+    assertEq(skipped.status, "skipped", "declined overwrite keeps existing Base");
+    assertEq(
+      contents.get(created.path),
+      originalContent,
+      "declined overwrite does not modify file content",
+    );
+
+    const updated = await writeBaseFile(
+      app,
+      "Generated/Bases",
+      { ...definition, content: "replacement\n" },
+      async () => true,
+    );
+    assertEq(updated.status, "updated", "confirmed overwrite updates existing Base");
+    assertEq(
+      contents.get(created.path),
+      "replacement\n",
+      "confirmed overwrite replaces Base content",
     );
   }
 

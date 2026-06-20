@@ -110,6 +110,56 @@
 | Filename template | `{{title}} ({{year}})` | 笔记文件名模板。变量：`{{title}}`、`{{year}}`、`{{imdb_id}}`、`{{trakt_id}}`。 |
 | Property prefix | `trakt_` | 插件写入的所有 frontmatter 属性的前缀（比如 `trakt_title`、`trakt_watched`）。留空表示不加前缀。 |
 
+### Bases
+
+**Bases** 标签页用于创建可选的 Obsidian 数据库式 `.base` 文件，
+直接读取已同步媒体笔记中的现有属性。它不会运行 Trakt 同步、修改媒体
+笔记、发起网络请求或向任何地方发送数据。
+
+每个生成的 Base 默认先显示以海报为主的 **Cards** 视图：纵向海报、
+紧凑卡片、一位小数的 Trakt 评分，以及用户选择的属性。第二个
+**Details** 表格使用同一组字段并提供海报缩略图。
+
+| 设置项 | 默认值 | 说明 |
+|---|---|---|
+| Bases folder | `Bases` | 生成的 `.base` 文件保存到此文件夹；文件夹不存在时会自动创建。 |
+
+可生成的文件：
+
+| File | Purpose |
+|---|---|
+| `Movies.base` | 电影笔记，按当前 `<prefix>type` 属性过滤。 |
+| `Shows.base` | 剧集笔记，并显示现有的剧集状态属性。 |
+| `Watchlist.base` | 现有想看属性为 `true` 的电影和剧集。 |
+| `Watched.base` | 现有已观看属性为 `true` 的电影和剧集。 |
+| `Ratings.base` | 现有个人评分大于 `0` 的电影和剧集。 |
+| `Trakt Library.base` | 电影与剧集的一体化总影库，可通过 **Create All-in-one Base** 单独创建，也会包含在 **Create All Bases** 中。 |
+
+在 **Choose fields shown in each Base** 下展开任一生成器，可以单独选择
+每张海报下方和 Details 表格中显示的字段。**Recommended** 恢复该 Base
+的推荐字段，**Select all** 显示全部支持的属性，**Clear** 只保留始终显示
+的海报和笔记标题。
+
+选择器覆盖插件当前写入的全部 frontmatter 数据：核心元数据、标签和标签
+笔记、社区与个人评分、已观看/想看/收藏状态、播放次数和活动时间、剧集
+状态与集数、电影发行信息、本地化原文、ID、外部链接和同步时间。
+**Episode progress** 会根据已观看集数和已播集数显示类似
+`8 / 10 · 80%` 的进度。插件目前不会把最新观看到的具体季/集号写入
+frontmatter，因此 Base 目前无法显示该值。
+
+预设会按用途选择默认排序：电影和剧集突出社区评分，想看按加入日期，
+已观看按最近观看时间，个人评分按你的分数，总影库优先显示较新的年份。
+生成后仍可在 Obsidian 中修改卡片大小、可见属性、排序、分组和过滤条件。
+
+生成的 Bases 会使用当前 **Notes folder** 和 **Property prefix**。
+例如，把前缀从 `trakt_` 改成 `media_` 后，生成的过滤条件和列会使用
+`media_type`、`media_title`、`media_watched` 等现有 `media_*` 属性。
+修改任一设置后可以重新生成。
+
+你可以在 Obsidian 中手动编辑生成的 `.base` 文件。如果目标文件已存在，
+插件会在覆盖前询问确认。确认覆盖会替换该 Base 中的手动修改；取消则
+保留现有文件。Bases 助手不会重写媒体笔记。
+
 ### Note templates
 
 | 设置项 | 默认值 | 说明 |

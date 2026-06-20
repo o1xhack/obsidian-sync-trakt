@@ -47,6 +47,7 @@ The TypeScript step in `npm run build` is **type checking only**
 src/                Plugin source code
 ├── main.ts          Plugin entry: onload(), commands, settings tab
 ├── settings.ts      Settings schema, defaults, settings tab UI, default templates
+├── bases.ts         Pure Obsidian Bases generators + vault file writer
 ├── i18n.ts          Plugin runtime UI strings (en + zh-CN), translator
 ├── sync-engine.ts   SyncEngine — orchestrates a sync run end to end
 ├── trakt-api.ts     Trakt API client + history state types
@@ -128,6 +129,14 @@ A few things are subtler than they look:
    `note-renderer.ts`
 6. If the setting is user-configurable but rarely changed, document in
    `docs/MANUAL.md` (and translations)
+
+The optional Bases helper is deliberately outside the sync engine.
+`src/bases.ts` generates deterministic `.base` YAML from `folder` and
+`propertyPrefix`, resolves the persisted per-Base field selections, then
+writes through Obsidian vault APIs. Its field registry must only reference
+properties that `buildFrontmatterData` can produce. Changes to generated
+views should stay in that module and its pure smoke tests unless they truly
+require new media-note fields.
 
 ### Add a new template variable
 

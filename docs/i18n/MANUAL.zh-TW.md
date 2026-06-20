@@ -110,6 +110,56 @@
 | Filename template | `{{title}} ({{year}})` | 筆記檔名範本。變數：`{{title}}`、`{{year}}`、`{{imdb_id}}`、`{{trakt_id}}`。 |
 | Property prefix | `trakt_` | 外掛寫入的所有 frontmatter 屬性的前綴（比如 `trakt_title`、`trakt_watched`）。留空表示不加前綴。 |
 
+### Bases
+
+**Bases** 分頁用來建立可選的 Obsidian 資料庫式 `.base` 檔案，
+直接讀取已同步媒體筆記中的現有屬性。它不會執行 Trakt 同步、修改媒體
+筆記、發出網路請求或把資料傳送到任何地方。
+
+每個生成的 Base 預設先顯示以海報為主的 **Cards** 檢視：直向海報、
+緊湊卡片、一位小數的 Trakt 評分，以及使用者選擇的屬性。第二個
+**Details** 表格使用同一組欄位並提供海報縮圖。
+
+| 設定項 | 預設值 | 說明 |
+|---|---|---|
+| Bases folder | `Bases` | 生成的 `.base` 檔案儲存在此資料夾；資料夾不存在時會自動建立。 |
+
+可生成的檔案：
+
+| File | Purpose |
+|---|---|
+| `Movies.base` | 電影筆記，依目前的 `<prefix>type` 屬性篩選。 |
+| `Shows.base` | 影集筆記，並顯示現有的影集狀態屬性。 |
+| `Watchlist.base` | 現有想看屬性為 `true` 的電影和影集。 |
+| `Watched.base` | 現有已觀看屬性為 `true` 的電影和影集。 |
+| `Ratings.base` | 現有個人評分大於 `0` 的電影和影集。 |
+| `Trakt Library.base` | 電影與影集的一體化總影庫，可透過 **Create All-in-one Base** 單獨建立，也會包含在 **Create All Bases** 中。 |
+
+在 **Choose fields shown in each Base** 下展開任一生成器，可以分別選擇
+每張海報下方和 Details 表格中顯示的欄位。**Recommended** 還原該 Base
+的建議欄位，**Select all** 顯示全部支援的屬性，**Clear** 只保留固定
+顯示的海報和筆記標題。
+
+選擇器涵蓋外掛目前寫入的全部 frontmatter 資料：核心中繼資料、標籤和
+標籤筆記、社群與個人評分、已觀看/想看/收藏狀態、播放次數和活動時間、
+影集狀態與集數、電影發行資訊、本地化原文、ID、外部連結和同步時間。
+**Episode progress** 會依已觀看集數和已播集數顯示類似
+`8 / 10 · 80%` 的進度。外掛目前不會把最新觀看到的具體季/集號寫入
+frontmatter，因此 Base 目前無法顯示該值。
+
+預設會依用途選擇排序：電影和影集突出社群評分，想看依加入日期，
+已觀看依最近觀看時間，個人評分依你的分數，總影庫優先顯示較新的年份。
+生成後仍可在 Obsidian 中修改卡片大小、可見屬性、排序、分組和篩選條件。
+
+生成的 Bases 會使用目前的 **Notes folder** 和 **Property prefix**。
+例如，把前綴從 `trakt_` 改成 `media_` 後，生成的篩選條件和欄位會使用
+`media_type`、`media_title`、`media_watched` 等現有 `media_*` 屬性。
+修改任一設定後可以重新生成。
+
+你可以在 Obsidian 中手動編輯生成的 `.base` 檔案。如果目標檔案已存在，
+外掛會在覆寫前要求確認。確認覆寫會取代該 Base 中的手動修改；取消則
+保留現有檔案。Bases 助手不會重寫媒體筆記。
+
 ### Note templates
 
 | 設定項 | 預設值 | 說明 |

@@ -35,6 +35,7 @@ obsidian-sync-trakt/
 ├── src/
 │   ├── main.ts             # Plugin entry: onload(), commands, settings tab registration, status bar
 │   ├── settings.ts         # TraktrSettings type, DEFAULT_SETTINGS, settings tab UI, default templates
+│   ├── bases.ts            # Pure .base generators + local vault create/update helpers
 │   ├── i18n.ts             # All plugin-runtime strings (en + zh-CN), translator function
 │   ├── sync-engine.ts      # SyncEngine class — orchestrates a sync run end to end
 │   ├── trakt-api.ts        # Trakt API client: device auth flow, sync endpoints, history, translations
@@ -104,6 +105,13 @@ cache before `SyncEngine` is constructed.
 
 **Acyclic.** `types.ts` and `utils.ts` are pure dependencies of
 everything else; nothing imports them in the other direction.
+
+`settings.ts` also calls `bases.ts` for the optional Bases setup tab and
+persists a separate selected-field list for each generated Base.
+The dependency is intentionally one-way at runtime: `bases.ts` imports
+`TraktrSettings` as a type only, contains deterministic YAML builders,
+and uses Obsidian vault APIs for explicit user-triggered file writes. It
+does not import or call `SyncEngine`.
 
 ## 3. Sync flow
 
@@ -312,6 +320,8 @@ interface TraktrSettings {
   // ── Notes ──
   propertyPrefix: string;
   folder: string;
+  basesFolder: string;
+  basesDisplayFields: BaseDisplaySettings;
   filenameTemplate: string;
   movieNoteTemplate: string;
   showNoteTemplate: string;
@@ -683,6 +693,7 @@ framework — assertions are inline `assertEq` / `assertTrue` /
 Coverage prioritizes:
 
 - Pure data transformations (renderers, picker functions, aggregators)
+- Deterministic Obsidian Bases generation and property-prefix handling
 - API response parsing (TMDB shape, Trakt shape)
 - Settings derivation helpers
 - Backward compatibility (e.g. byte-identical output with localization
