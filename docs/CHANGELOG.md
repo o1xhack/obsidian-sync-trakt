@@ -7,6 +7,25 @@ plugin is submitted to Obsidian's official Community Plugins directory.
 
 For the full design rationale behind major changes, see [`specs/`](specs/).
 
+## 1.3.1 — 2026-07-20
+
+**Safer cross-platform note reconciliation.** This patch fixes duplicate
+media notes and apparent freezes during large syncs.
+
+### Fixed
+
+- Existing-note detection now accepts CRLF frontmatter and UTF-8 BOMs, so
+  cross-platform notes remain visible to sync, collision handling, and dedupe.
+- Notes created with a previous property prefix are recognized only when they
+  carry a plugin-owned signature, avoiding accidental ownership of unrelated
+  notes that merely link to Trakt.
+- Filename collisions caused by a late-arriving same-ID note now reuse the
+  original path instead of creating a `Title [trakt_id] (year).md` copy.
+- The duplicate-note maintenance action can find and remove copies created by
+  these identity-detection failures while preserving the natural filename.
+- Large note reconciliations periodically yield to Obsidian's UI, metadata
+  index, and vault-sync queues between write batches.
+
 ## 1.3.0 — 2026-05-21
 
 **Smarter media-note writes.** This release reduces Obsidian Sync version
