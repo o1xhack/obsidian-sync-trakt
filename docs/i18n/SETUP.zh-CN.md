@@ -8,15 +8,15 @@
 
 让插件能授权访问你的 Trakt 账号必备。
 
-1. 在 [trakt.tv](https://trakt.tv) 登录（免费账号即可）
-2. 打开 <https://trakt.tv/oauth/applications> → **New Application**
+1. 在 [Trakt](https://app.trakt.tv) 登录（免费账号即可）
+2. 打开 [Create API application](https://app.trakt.tv/settings/apps/api/new)
 3. 填表：
    - **Name** —— 随便填，比如 `Sync Trakt`
-   - **Redirect URI** —— 必须**严格**填 `urn:ietf:wg:oauth:2.0:oob` ⚠️ —— 这是设备授权流程的固定字符串，差一个字符 Connect 会直接 401
-   - **Description / Website / Permissions** —— 可选，留默认即可
-4. 保存。页面会显示 **Client ID** 和 **Client Secret**（点 Secret 旁边的眼睛图标显示）
+   - **Redirect URIs** —— 必须**严格**填 `urn:ietf:wg:oauth:2.0:oob` ⚠️ —— 这是设备授权流程的固定字符串，差一个字符 Connect 会直接 401
+   - **Description / JavaScript (CORS) origins** —— 可选，留空即可
+4. 点 **Create**。页面会显示 **Client ID** 和 **Client Secret**（点 Secret 旁边的眼睛图标显示）
 
-之后随时可以回 <https://trakt.tv/oauth/applications> 点你的应用查看这两个值。
+之后随时可以回 [API Applications 页面](https://app.trakt.tv/settings/apps/api)，点你的应用查看这两个值。
 
 ## 2. TMDB — 申请 v3 API key
 
@@ -76,7 +76,7 @@
 
 ### Connect 报 401
 
-99% 的情况：Trakt OAuth 应用的 Redirect URI 错了。必须严格是 `urn:ietf:wg:oauth:2.0:oob`。回 <https://trakt.tv/oauth/applications>，点你的应用，改这个字段，保存，再点 Connect。
+99% 的情况：Trakt OAuth 应用的 Redirect URI 错了。必须严格是 `urn:ietf:wg:oauth:2.0:oob`。回 [API Applications 页面](https://app.trakt.tv/settings/apps/api)，点你的应用，改这个字段，保存，再点 Connect。
 
 ### TMDB 拒绝 API key 申请
 
@@ -100,7 +100,7 @@
 
 | Token | URL |
 |---|---|
-| Trakt client ID + secret | <https://trakt.tv/oauth/applications> → 点你的应用 |
+| Trakt client ID + secret | [Trakt API Applications](https://app.trakt.tv/settings/apps/api) → 点你的应用 |
 | TMDB API key (v3 auth) | <https://www.themoviedb.org/settings/api> |
 
 Trakt access token 自动刷新，你不用管。TMDB API key 不会过期。

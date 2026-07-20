@@ -10,19 +10,20 @@ running your first sync.
 
 Required so the plugin can authorize against your Trakt account.
 
-1. Sign in at [trakt.tv](https://trakt.tv) (free account is fine)
-2. Open <https://trakt.tv/oauth/applications> → **New Application**
+1. Sign in at [Trakt](https://app.trakt.tv) (free account is fine)
+2. Open [Create API application](https://app.trakt.tv/settings/apps/api/new)
 3. Fill the form:
    - **Name** — anything, e.g. `Sync Trakt`
-   - **Redirect URI** — must be **exactly** `urn:ietf:wg:oauth:2.0:oob` ⚠️ — this
+   - **Redirect URIs** — enter **exactly** `urn:ietf:wg:oauth:2.0:oob` ⚠️ — this
      is the device-flow magic string. One character off and Connect will fail
      with a 401
-   - **Description / Website / Permissions** — optional / leave defaults
-4. Save. The app page now shows your **Client ID** and **Client Secret** (click
+   - **Description / JavaScript (CORS) origins** — optional; leave them blank
+4. Click **Create**. The app page now shows your **Client ID** and **Client Secret** (click
    the eye icon next to Secret to reveal it)
 
-Both values stay accessible at <https://trakt.tv/oauth/applications> later —
-click your app to view them again.
+Both values stay accessible on the
+[API Applications page](https://app.trakt.tv/settings/apps/api) later — click
+your app to view them again.
 
 ## 2. TMDB — get a v3 API key
 
@@ -105,8 +106,9 @@ For a quick first test, leave only **Sync watchlist** on — most users have
 ### Connect fails with 401
 
 Almost always the Redirect URI in your Trakt OAuth app. It must be exactly
-`urn:ietf:wg:oauth:2.0:oob`. Open <https://trakt.tv/oauth/applications>, click
-your app, fix the field, save, and try Connect again.
+`urn:ietf:wg:oauth:2.0:oob`. Open the
+[API Applications page](https://app.trakt.tv/settings/apps/api), click your
+app, fix the field, save, and try Connect again.
 
 ### TMDB rejects the API key request
 
@@ -138,7 +140,7 @@ to use a different `Notes folder` in its settings.
 
 | Token | URL |
 |---|---|
-| Trakt client ID + secret | <https://trakt.tv/oauth/applications> → click your app |
+| Trakt client ID + secret | [Trakt API Applications](https://app.trakt.tv/settings/apps/api) → click your app |
 | TMDB API key (v3 auth) | <https://www.themoviedb.org/settings/api> |
 
 Trakt access tokens auto-refresh; you don't need to do anything. TMDB API keys

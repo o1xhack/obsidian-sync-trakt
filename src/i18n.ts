@@ -328,8 +328,8 @@ export const STRINGS = {
     "zh-CN": "Trakt 客户端 ID",
   },
   "auth.clientId.desc": {
-    en: "Create an app at trakt.tv/oauth/applications to get this.",
-    "zh-CN": "在 trakt.tv/oauth/applications 创建应用以获取。",
+    en: "Create an app at app.trakt.tv/settings/apps/api/new to get this.",
+    "zh-CN": "在 app.trakt.tv/settings/apps/api/new 创建应用以获取。",
   },
   "auth.clientSecret.name": {
     en: "Trakt client secret",

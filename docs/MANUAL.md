@@ -41,10 +41,11 @@ Or via [BRAT](https://github.com/TfTHacker/obsidian42-brat): add the beta plugin
 
 ### 3a. Create a Trakt application
 
-1. Sign in to [trakt.tv](https://trakt.tv) and go to **Settings → Your API Apps → New Application**
+1. Sign in to [Trakt](https://app.trakt.tv) and open
+   [Create API application](https://app.trakt.tv/settings/apps/api/new)
 2. Give it any name (e.g. "Traktr")
-3. For **Redirect URI**, enter `urn:ietf:wg:oauth:2.0:oob`
-4. Save. Copy the **Client ID** and **Client Secret**
+3. For **Redirect URIs**, enter `urn:ietf:wg:oauth:2.0:oob`
+4. Click **Create**. Copy the **Client ID** and **Client Secret**
 
 ### 3b. (Optional) Get a TMDB API key
 

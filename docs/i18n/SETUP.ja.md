@@ -8,15 +8,15 @@ Sync Trakt をあなたのアカウントに接続するまでの完全なフロ
 
 プラグインがあなたの Trakt アカウントに対して認証できるようにするために必須。
 
-1. [trakt.tv](https://trakt.tv) にサインイン（無料アカウントで OK）
-2. <https://trakt.tv/oauth/applications> を開く → **New Application**
+1. [Trakt](https://app.trakt.tv) にサインイン（無料アカウントで OK）
+2. [Create API application](https://app.trakt.tv/settings/apps/api/new) を開く
 3. フォームに記入：
    - **Name** — 任意、例：`Sync Trakt`
-   - **Redirect URI** — **必ず正確に** `urn:ietf:wg:oauth:2.0:oob` ⚠️ — これはデバイス認証フローの固定文字列。1 文字でも違うと Connect が 401 で失敗します
-   - **Description / Website / Permissions** — 任意 / デフォルトのまま
-4. 保存。アプリページに **Client ID** と **Client Secret** が表示されます（Secret 横の目アイコンをクリックで表示）
+   - **Redirect URIs** — **必ず正確に** `urn:ietf:wg:oauth:2.0:oob` ⚠️ — これはデバイス認証フローの固定文字列。1 文字でも違うと Connect が 401 で失敗します
+   - **Description / JavaScript (CORS) origins** — 任意。空欄のままで構いません
+4. **Create** をクリック。アプリページに **Client ID** と **Client Secret** が表示されます（Secret 横の目アイコンをクリックで表示）
 
-両方の値はあとで <https://trakt.tv/oauth/applications> でアプリをクリックすればいつでも確認できます。
+両方の値はあとで [API Applications ページ](https://app.trakt.tv/settings/apps/api) からアプリをクリックすればいつでも確認できます。
 
 ## 2. TMDB — v3 API キーを取得
 
@@ -76,7 +76,7 @@ v3 キーは <https://www.themoviedb.org/settings/api> でいつでも確認で�
 
 ### Connect が 401 で失敗
 
-ほぼ確実に Trakt OAuth アプリの Redirect URI が間違っています。**必ず正確に** `urn:ietf:wg:oauth:2.0:oob` でなければなりません。<https://trakt.tv/oauth/applications> でアプリをクリック、フィールドを修正、保存、再度 Connect を試してください。
+ほぼ確実に Trakt OAuth アプリの Redirect URI が間違っています。**必ず正確に** `urn:ietf:wg:oauth:2.0:oob` でなければなりません。[API Applications ページ](https://app.trakt.tv/settings/apps/api) でアプリをクリック、フィールドを修正、保存、再度 Connect を試してください。
 
 ### TMDB が API キー申請を拒否
 
@@ -100,7 +100,7 @@ v3 キーは <https://www.themoviedb.org/settings/api> でいつでも確認で�
 
 | トークン | URL |
 |---|---|
-| Trakt client ID + secret | <https://trakt.tv/oauth/applications> → アプリをクリック |
+| Trakt client ID + secret | [Trakt API Applications](https://app.trakt.tv/settings/apps/api) → アプリをクリック |
 | TMDB API key (v3 auth) | <https://www.themoviedb.org/settings/api> |
 
 Trakt のアクセストークンは自動更新されるので、何もする必要はありません。TMDB API キーは期限切れになりません。

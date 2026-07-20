@@ -36,10 +36,10 @@
 
 ### 3a. 创建 Trakt 应用
 
-1. 登录 [trakt.tv](https://trakt.tv)，去 **Settings → Your API Apps → New Application**
+1. 登录 [Trakt](https://app.trakt.tv)，打开 [Create API application](https://app.trakt.tv/settings/apps/api/new)
 2. 起个名字（比如 "Sync Trakt"）
-3. **Redirect URI** 填 `urn:ietf:wg:oauth:2.0:oob`
-4. 保存。复制 **Client ID** 和 **Client Secret**
+3. **Redirect URIs** 填 `urn:ietf:wg:oauth:2.0:oob`
+4. 点 **Create**。复制 **Client ID** 和 **Client Secret**
 
 ### 3b.（可选）申请 TMDB API key
 

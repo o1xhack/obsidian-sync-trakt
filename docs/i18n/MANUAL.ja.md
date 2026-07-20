@@ -37,10 +37,10 @@
 
 ### 3a. Trakt アプリケーションを作成
 
-1. [trakt.tv](https://trakt.tv) にサインインし、**Settings → Your API Apps → New Application** へ
+1. [Trakt](https://app.trakt.tv) にサインインし、[Create API application](https://app.trakt.tv/settings/apps/api/new) を開く
 2. 任意の名前を付ける（例：「Sync Trakt」）
-3. **Redirect URI** に `urn:ietf:wg:oauth:2.0:oob` を入力
-4. 保存。**Client ID** と **Client Secret** をコピー
+3. **Redirect URIs** に `urn:ietf:wg:oauth:2.0:oob` を入力
+4. **Create** をクリック。**Client ID** と **Client Secret** をコピー
 
 ### 3b.（任意）TMDB API キーの取得
 
