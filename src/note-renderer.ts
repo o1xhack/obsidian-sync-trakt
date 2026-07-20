@@ -520,7 +520,9 @@ export function applyCommunityStatsPolicy(
 }
 
 function frontmatterMatch(content: string): RegExpMatchArray | null {
-  return content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
+  return content.match(
+    /^(?:\uFEFF)?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n)?/,
+  );
 }
 
 function topLevelYamlKey(line: string): string | null {

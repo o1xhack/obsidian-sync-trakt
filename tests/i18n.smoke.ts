@@ -50,7 +50,11 @@ import {
   stateFromEvents,
   getIncrementalStartAt,
 } from "../src/history-state";
-import { processWithConcurrency } from "../src/utils";
+import {
+  parseFrontmatter,
+  processWithConcurrency,
+  yieldToEventLoopEvery,
+} from "../src/utils";
 import {
   SyncEngine,
   buildFilename,
@@ -1467,6 +1471,26 @@ void (async () => {
     assertEq(progressUpdates[items.length - 1].total, items.length, "total stays correct");
   }
 
+  console.log("\n[22b] yieldToEventLoopEvery — yields only between write batches");
+  {
+    assertEq(
+      await yieldToEventLoopEvery(24, 25),
+      false,
+      "does not yield before a batch boundary",
+    );
+    let timerRan = false;
+    const timer = setTimeout(() => {
+      timerRan = true;
+    }, 0);
+    assertEq(
+      await yieldToEventLoopEvery(25, 25),
+      true,
+      "yields after a full batch",
+    );
+    clearTimeout(timer);
+    assertTrue(timerRan, "scheduled UI work can run during the batch yield");
+  }
+
   console.log("\n[25] fetchMovieMetadata — cache hit returns without API call");
   {
     // Pre-populate the cache with a known-fresh entry. fetchMovieMetadata
@@ -1913,6 +1937,23 @@ void (async () => {
       "---\ntrakt_title: Only Title\n---\n# Body only",
       "frontmatter block is inserted before body",
     );
+  }
+
+  console.log("\n[29e] mergeFrontmatterIntoContent — repairs BOM/CRLF notes in place");
+  {
+    const merged = mergeFrontmatterIntoContent(
+      "\uFEFF---\r\ntrakt_title: Old Title\r\nuser_rating: 5\r\n---\r\n# Body\r\n",
+      { trakt_title: "Updated Title" },
+    );
+    assertContains(merged, "trakt_title: Updated Title", "managed field is updated");
+    assertContains(merged, "user_rating: 5", "user field is preserved");
+    assertContains(merged, "---\n# Body\r\n", "body remains outside frontmatter");
+    assertEq(
+      (merged.match(/^---$/gm) ?? []).length,
+      2,
+      "BOM/CRLF update leaves exactly one frontmatter block",
+    );
+    assertNotContains(merged, "\uFEFF---", "UTF-8 BOM is not stranded in the body");
   }
 
   console.log("\n[30] body-section diff: identity check on updateManagedBodySections");
@@ -3819,6 +3860,29 @@ void (async () => {
     assertEq(result2.tier, 1, "self-exclusion: tier === 1 when other file genuinely collides");
   }
 
+  // ── Test 61a: issue #1 — cross-platform frontmatter identity parsing ──
+  // Existing notes are identified by trakt_type + trakt_id before the write
+  // phase. If the parser rejects the file's line endings or UTF-8 BOM, the
+  // note disappears from the identity index, the filename collision logic
+  // appends [trakt_id], and the maintenance deduper misses both copies.
+
+  console.log("\n[61a] parseFrontmatter — CRLF and UTF-8 BOM identities");
+  {
+    const crlf = parseFrontmatter(
+      "---\r\ntrakt_type: show\r\ntrakt_id: 189764\r\n---\r\n# Body\r\n",
+    );
+    assertEq(crlf.frontmatter.trakt_type, "show", "CRLF type is parsed");
+    assertEq(crlf.frontmatter.trakt_id, "189764", "CRLF id is parsed");
+    assertEq(crlf.body, "# Body\r\n", "CRLF body is preserved byte-for-byte");
+
+    const bom = parseFrontmatter(
+      "\uFEFF---\ntrakt_type: movie\ntrakt_id: 169972\n---\n# Body\n",
+    );
+    assertEq(bom.frontmatter.trakt_type, "movie", "UTF-8 BOM type is parsed");
+    assertEq(bom.frontmatter.trakt_id, "169972", "UTF-8 BOM id is parsed");
+    assertEq(bom.body, "# Body\n", "UTF-8 BOM is excluded from the parsed body");
+  }
+
   // ── Test 61b: collision identity lookup prevents same-ID duplicates ─
   // The sync engine keeps one folder index, but on a second device Obsidian
   // Sync can still download an existing note after that snapshot. If the
@@ -3854,7 +3918,9 @@ void (async () => {
     app.vault = {
       cachedRead: async (file) => {
         reads.push(file.path);
-        return "---\ntrakt_type: show\ntrakt_id: 189764\n---\n";
+        return file === plain
+          ? "---\r\ntrakt_type: show\r\ntrakt_id: 189764\r\n---\r\n"
+          : "\uFEFF---\r\ntrakt_type: show\r\ntrakt_id: 189764\r\n---\r\n";
       },
     };
 
@@ -3875,6 +3941,54 @@ void (async () => {
       reads.sort(),
       [bracketed.path, plain.path].sort(),
       "collision identity lookup reads only the collided candidate files",
+    );
+
+    const legacyPrefix = new stub.TFile() as InstanceType<typeof stub.TFile> & {
+      basename: string;
+    };
+    legacyPrefix.path = "Trakt/Legacy Prefix (2024).md";
+    legacyPrefix.name = "Legacy Prefix (2024).md";
+    legacyPrefix.basename = "Legacy Prefix (2024)";
+    legacyPrefix.extension = "md";
+    app.vault = {
+      cachedRead: async () =>
+        "---\nlegacy_type: movie\nlegacy_id: 54321\nlegacy_title: Legacy Prefix\nlegacy_slug: legacy-prefix-2024\nlegacy_url: https://trakt.tv/movies/legacy-prefix-2024\nlegacy_synced_at: 2026-05-20T00:00:00Z\n---\n",
+    };
+    const foundAfterPrefixChange = await findMatchingIdentityFile(
+      app as never,
+      "custom_",
+      "movie",
+      54321,
+      [legacyPrefix],
+    );
+    assertEq(
+      foundAfterPrefixChange?.path,
+      legacyPrefix.path,
+      "identity lookup recognizes a managed note after propertyPrefix changes",
+    );
+
+    const manualTraktLink = new stub.TFile() as InstanceType<typeof stub.TFile> & {
+      basename: string;
+    };
+    manualTraktLink.path = "Trakt/Manual Trakt Link.md";
+    manualTraktLink.name = "Manual Trakt Link.md";
+    manualTraktLink.basename = "Manual Trakt Link";
+    manualTraktLink.extension = "md";
+    app.vault = {
+      cachedRead: async () =>
+        "---\nmedia_type: movie\nmedia_id: 54321\nmedia_url: https://trakt.tv/movies/manual-link\n---\n",
+    };
+    const unrelatedMatch = await findMatchingIdentityFile(
+      app as never,
+      "custom_",
+      "movie",
+      54321,
+      [manualTraktLink],
+    );
+    assertEq(
+      unrelatedMatch,
+      null,
+      "legacy-prefix fallback ignores a manual Trakt-link note without a plugin-owned marker",
     );
   }
 
@@ -3998,6 +4112,203 @@ void (async () => {
       [customPlain.path],
       "custom template keeps the filename that matches the current template",
     );
+
+    const crlfPlain = makeFile("Trakt/3 Body Problem (2024).md");
+    const crlfBracketed = makeFile("Trakt/3 Body Problem [169972] (2024).md");
+    const crlfApp = makeApp([crlfPlain, crlfBracketed], {
+      [crlfPlain.path]: fm(
+        "show",
+        169972,
+        "3 Body Problem",
+        2024,
+        "2026-05-15T00:00:00Z",
+      ).replace(/\n/g, "\r\n"),
+      [crlfBracketed.path]: `\uFEFF${fm(
+        "show",
+        169972,
+        "3 Body Problem",
+        2024,
+        "2026-05-16T00:00:00Z",
+      ).replace(/\n/g, "\r\n")}`,
+    });
+    const crlfResult = await dedupeDuplicateNotes(
+      crlfApp.app as never,
+      "Trakt",
+      "{{title}} ({{year}})",
+      "trakt_",
+    );
+    assertEq(
+      crlfResult.duplicateGroups,
+      1,
+      "issue #1: CRLF/BOM duplicate identity group is detected",
+    );
+    assertEq(
+      crlfApp.trashed,
+      [crlfBracketed.path],
+      "issue #1: generated [trakt_id] copy is moved to trash",
+    );
+
+    const legacyPlain = makeFile("Trakt/Legacy Prefix (2024).md");
+    const legacyBracketed = makeFile("Trakt/Legacy Prefix [54321] (2024).md");
+    const legacyFm = (syncedAt: string) =>
+      `---\nlegacy_type: movie\nlegacy_id: 54321\nlegacy_title: Legacy Prefix\nlegacy_original_title: Legacy Prefix\nlegacy_year: 2024\nlegacy_slug: legacy-prefix-2024\nlegacy_url: https://trakt.tv/movies/legacy-prefix-2024\nlegacy_synced_at: "${syncedAt}"\n---\n`;
+    const legacyApp = makeApp([legacyPlain, legacyBracketed], {
+      [legacyPlain.path]: legacyFm("2026-05-15T00:00:00Z"),
+      [legacyBracketed.path]: legacyFm("2026-05-16T00:00:00Z"),
+    });
+    const legacyResult = await dedupeDuplicateNotes(
+      legacyApp.app as never,
+      "Trakt",
+      "{{title}} ({{year}})",
+      "custom_",
+    );
+    assertEq(
+      legacyResult.duplicateGroups,
+      1,
+      "propertyPrefix drift does not hide a managed duplicate group",
+    );
+    assertEq(
+      legacyApp.trashed,
+      [legacyBracketed.path],
+      "propertyPrefix drift still keeps the natural filename",
+    );
+  }
+
+  console.log("\n[61d] issue #1 — 330 cross-platform notes reconcile without duplicates");
+  {
+    const stub = await import("./stub-obsidian");
+    const settings = withSettings({
+      folder: "Trakt",
+      propertyPrefix: "trakt_",
+      metadataLanguage: "",
+      tmdbApiKey: "",
+      overwriteExisting: false,
+      autoRenameOnLanguageChange: true,
+    });
+    const folder = new stub.TFolder();
+    folder.path = "Trakt";
+    const filesByPath = new Map<string, InstanceType<typeof stub.TFile>>();
+    const contents = new Map<string, string>();
+    const cachedFrontmatter = new Map<string, Record<string, unknown>>();
+    const mergedItems = new Map<string, NormalizedItem>();
+
+    for (let i = 1; i <= 330; i++) {
+      const title = `Issue 1 Movie ${String(i).padStart(3, "0")}`;
+      const item: NormalizedItem = {
+        ...makeMovie(),
+        title,
+        originalTitle: title,
+        year: 2024,
+        ids: {
+          trakt: 200000 + i,
+          slug: `issue-1-movie-${i}`,
+          imdb: `tt${String(2000000 + i)}`,
+          tmdb: 300000 + i,
+        },
+      };
+      const file = new stub.TFile() as InstanceType<typeof stub.TFile> & {
+        basename: string;
+      };
+      file.path = `Trakt/${title} (2024).md`;
+      file.name = `${title} (2024).md`;
+      file.basename = `${title} (2024)`;
+      file.extension = "md";
+      filesByPath.set(file.path, file);
+      folder.children.push(file);
+
+      const prefix = i % 2 === 0 ? "\uFEFF" : "";
+      contents.set(
+        file.path,
+        `${prefix}---\r\ntrakt_type: movie\r\ntrakt_id: ${item.ids.trakt}\r\n---\r\n# ${title}\r\n`,
+      );
+      const diskFm = buildFrontmatterData(item, settings);
+      for (const key of Object.keys(diskFm)) {
+        const value = diskFm[key];
+        if (value === null || value === undefined || value === "") {
+          delete diskFm[key];
+        }
+      }
+      cachedFrontmatter.set(file.path, diskFm);
+      mergedItems.set(`movie:${item.ids.trakt}`, item);
+    }
+
+    const createdPaths: string[] = [];
+    const processedPaths: string[] = [];
+    const renamedPaths: string[] = [];
+    const app = new stub.App() as unknown as {
+      vault: {
+        getAbstractFileByPath: (path: string) => unknown;
+        cachedRead: (file: InstanceType<typeof stub.TFile>) => Promise<string>;
+        create: (path: string, content: string) => Promise<InstanceType<typeof stub.TFile>>;
+        process: (
+          file: InstanceType<typeof stub.TFile>,
+          callback: (content: string) => string,
+        ) => Promise<void>;
+      };
+      metadataCache: {
+        getFileCache: (file: InstanceType<typeof stub.TFile>) => unknown;
+      };
+      fileManager: {
+        renameFile: (
+          file: InstanceType<typeof stub.TFile>,
+          newPath: string,
+        ) => Promise<void>;
+      };
+    };
+    app.vault = {
+      getAbstractFileByPath: (path) =>
+        path === "Trakt" ? folder : filesByPath.get(path) ?? null,
+      cachedRead: async (file) => contents.get(file.path) ?? "",
+      create: async (path, content) => {
+        createdPaths.push(path);
+        const file = new stub.TFile();
+        file.path = path;
+        file.name = path.split("/").pop() ?? path;
+        file.extension = "md";
+        contents.set(path, content);
+        return file;
+      },
+      process: async (file, callback) => {
+        processedPaths.push(file.path);
+        contents.set(file.path, callback(contents.get(file.path) ?? ""));
+      },
+    };
+    app.metadataCache = {
+      getFileCache: (file) => ({
+        frontmatter: cachedFrontmatter.get(file.path),
+      }),
+    };
+    app.fileManager = {
+      renameFile: async (file, newPath) => {
+        renamedPaths.push(`${file.path} -> ${newPath}`);
+      },
+    };
+
+    const result = {
+      added: 0,
+      updated: 0,
+      unchanged: 0,
+      removed: 0,
+      renamed: 0,
+      failed: 0,
+      errors: [] as string[],
+    };
+    const engine = new SyncEngine(app as never, settings, async () => undefined);
+    await (
+      engine as unknown as {
+        reconcileType: (
+          items: Map<string, NormalizedItem>,
+          syncResult: typeof result,
+        ) => Promise<void>;
+      }
+    ).reconcileType(mergedItems, result);
+
+    assertEq(result.unchanged, 330, "all 330 existing identities are reused");
+    assertEq(result.added, 0, "no [trakt_id] duplicate notes are created");
+    assertEq(result.failed, 0, "large reconcile completes without failures");
+    assertEq(createdPaths, [], "vault.create is never called for existing notes");
+    assertEq(processedPaths, [], "unchanged notes are not rewritten");
+    assertEq(renamedPaths, [], "existing natural filenames remain stable");
   }
 
   // ── Test 62: [1.0.0] WhatsNewModal i18n keys present in EN + zh-CN ──

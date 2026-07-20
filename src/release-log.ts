@@ -42,6 +42,14 @@ export interface ReleaseHighlight {
  */
 export const RELEASE_LOG: ReleaseLogEntry[] = [
   {
+    version: "1.3.1",
+    titleEn: "Safer cross-platform note reconciliation",
+    titleZh: "更安全的跨平台笔记对账",
+    isBugfix: true,
+    en: "Fixes duplicate media notes and apparent freezes during large syncs. Existing-note detection now accepts CRLF frontmatter and UTF-8 BOMs, safely recognizes notes created with a previous property prefix, and reuses the original filename instead of creating a [trakt_id] copy. The dedupe action can recover duplicates created by this failure mode, while batched note writes periodically yield to Obsidian's UI, metadata index, and vault-sync queues.",
+    zh: "修复大型同步期间重复生成媒体笔记和看似卡死的问题。现有笔记识别现在支持 CRLF frontmatter 与 UTF-8 BOM，并会安全识别由旧 property prefix 创建的笔记，优先复用原始文件名，不再生成带 [trakt_id] 的副本。去重操作可以清理由此问题产生的重复笔记；批量写入也会定期让出执行时间，供 Obsidian UI、元数据索引和 vault 同步队列继续运行。",
+  },
+  {
     version: "1.3.0",
     titleEn: "Smarter media-note writes",
     titleZh: "更智能的媒体笔记写入",
