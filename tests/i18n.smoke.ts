@@ -5169,6 +5169,239 @@ void (async () => {
     );
   }
 
+  console.log("\n[75] issue #2 — watchlist removals clear retained note state");
+  {
+    const stub = await import("./stub-obsidian");
+    const movie = {
+      title: "Removed Watchlist Movie",
+      year: 2026,
+      ids: {
+        trakt: 910002,
+        slug: "removed-watchlist-movie-2026",
+        imdb: "tt0910002",
+        tmdb: 910002,
+      },
+      overview: "A movie that has left the watchlist.",
+      runtime: 101,
+      country: "us",
+      genres: ["drama"],
+      rating: 7.4,
+      votes: 42,
+      certification: "PG-13",
+      language: "en",
+      status: "released",
+    };
+
+    // When another enabled source still returns the movie, an empty
+    // watchlist response must explicitly mark membership as absent.
+    stub.resetRequestUrlMock((req) => {
+      if (req.url.includes("/sync/favorites/movies")) {
+        return {
+          status: 200,
+          json: [
+            {
+              rank: 1,
+              id: 123,
+              listed_at: "2026-07-18T12:00:00.000Z",
+              notes: null,
+              type: "movie",
+              movie,
+            },
+          ],
+          headers: {},
+        };
+      }
+      return { status: 200, json: [], headers: {} };
+    });
+    const mergedSettings = withSettings({
+      clientId: "client",
+      accessToken: "access",
+      refreshToken: "refresh",
+      tokenExpiresAt: Date.now() + 86_400_000,
+      syncMovies: true,
+      syncShows: false,
+      syncWatchlist: true,
+      syncWatched: false,
+      syncWatchedDetail: false,
+      syncFavorites: true,
+      syncRatings: false,
+    });
+    const mergedEngine = new SyncEngine(
+      new stub.App() as never,
+      mergedSettings,
+      async () => undefined,
+    );
+    const mergedResult = await mergedEngine.syncDailyNotesData();
+    assertEq(mergedResult.items.length, 1, "favorite source keeps the movie in merged data");
+    assertEq(
+      mergedResult.items[0].watchlist,
+      false,
+      "empty authoritative watchlist marks a merged movie as removed",
+    );
+    const removedData = buildFrontmatterData(
+      {
+        ...mergedResult.items[0],
+        watchlist_added_at: "2026-07-17T12:00:00.000Z",
+      },
+      mergedSettings,
+    );
+    assertEq(
+      removedData.trakt_watchlist,
+      null,
+      "removed membership deletes the stale watchlist flag",
+    );
+    assertEq(
+      removedData.trakt_watchlist_added_at,
+      null,
+      "removed membership deletes the stale listed_at timestamp",
+    );
+    assertTrue(
+      !(removedData.tags as string[]).includes("trakt/watchlist"),
+      "removed membership omits the watchlist tag",
+    );
+
+    type RetainedApp = {
+      app: InstanceType<typeof stub.App>;
+      contents: Map<string, string>;
+      processedPaths: string[];
+      file: InstanceType<typeof stub.TFile> & { basename: string };
+    };
+    const makeRetainedApp = (): RetainedApp => {
+      const folder = new stub.TFolder();
+      folder.path = "Trakt";
+      const file = new stub.TFile() as RetainedApp["file"];
+      file.path = "Trakt/Removed Watchlist Movie (2026).md";
+      file.name = "Removed Watchlist Movie (2026).md";
+      file.basename = "Removed Watchlist Movie (2026)";
+      file.extension = "md";
+      folder.children.push(file);
+      const content = `---\ntrakt_type: movie\ntrakt_id: 910002\ntrakt_title: Removed Watchlist Movie\ntrakt_slug: removed-watchlist-movie-2026\ntrakt_url: https://trakt.tv/movies/removed-watchlist-movie-2026\ntrakt_synced_at: 2026-07-17T12:00:00.000Z\ntrakt_watchlist: true\ntrakt_watchlist_added_at: 2026-07-17T10:00:00.000Z\ntags:\n  - trakt/movie\n  - trakt/watchlist\n  - personal/keep\ntrakt_tag_notes:\n  - "[[trakt/movie]]"\n  - "[[trakt/watchlist]]"\ncustom_field: keep\n---\n# Personal notes\nDo not change this body.\n`;
+      const contents = new Map([[file.path, content]]);
+      const processedPaths: string[] = [];
+      const app = new stub.App() as RetainedApp["app"] & {
+        metadataCache: {
+          getFileCache: () => { frontmatter: Record<string, unknown> };
+        };
+      };
+      app.vault = {
+        getAbstractFileByPath: (path: string) =>
+          path === "Trakt" ? folder : path === file.path ? file : null,
+        cachedRead: async (target: InstanceType<typeof stub.TFile>) =>
+          contents.get(target.path) ?? "",
+        process: async (
+          target: InstanceType<typeof stub.TFile>,
+          callback: (oldContent: string) => string,
+        ) => {
+          processedPaths.push(target.path);
+          contents.set(target.path, callback(contents.get(target.path) ?? ""));
+        },
+      };
+      app.metadataCache = {
+        getFileCache: () => ({
+          frontmatter: {
+            trakt_type: "movie",
+            trakt_id: 910002,
+            trakt_title: "Removed Watchlist Movie",
+            trakt_slug: "removed-watchlist-movie-2026",
+            trakt_url: "https://trakt.tv/movies/removed-watchlist-movie-2026",
+            trakt_synced_at: "2026-07-17T12:00:00.000Z",
+            trakt_watchlist: true,
+            trakt_watchlist_added_at: "2026-07-17T10:00:00.000Z",
+            tags: ["trakt/movie", "trakt/watchlist", "personal/keep"],
+            trakt_tag_notes: ["[[trakt/movie]]", "[[trakt/watchlist]]"],
+            custom_field: "keep",
+          },
+        }),
+      };
+      app.fileManager = {
+        renameFile: async () => undefined,
+        trashFile: async () => undefined,
+      };
+      return { app, contents, processedPaths, file };
+    };
+
+    // The default configuration keeps notes that are absent from every
+    // current source. Those retained notes still need their stale watchlist
+    // classification cleared without touching the user's body.
+    stub.resetRequestUrlMock(() => ({
+      status: 200,
+      json: [],
+      headers: {},
+    }));
+    const retained = makeRetainedApp();
+    const retainedSettings = withSettings({
+      clientId: "client",
+      accessToken: "access",
+      refreshToken: "refresh",
+      tokenExpiresAt: Date.now() + 86_400_000,
+      folder: "Trakt",
+      syncMovies: true,
+      syncShows: false,
+      syncWatchlist: true,
+      syncWatched: false,
+      syncWatchedDetail: false,
+      syncFavorites: false,
+      syncRatings: false,
+      addTags: true,
+      addTagNotes: true,
+      tagPrefix: "trakt",
+      tagNotesFolder: "trakt",
+      overwriteExisting: false,
+      deleteRemovedItems: false,
+      autoRenameOnLanguageChange: false,
+    });
+    const retainedEngine = new SyncEngine(
+      retained.app as never,
+      retainedSettings,
+      async () => undefined,
+    );
+    const retainedResult = await retainedEngine.sync();
+    const retainedContent = retained.contents.get(retained.file.path) ?? "";
+    assertEq(retainedResult.updated, 1, "retained stale note is updated once");
+    assertEq(retainedResult.removed, 0, "retained note is not deleted");
+    assertEq(retainedResult.failed, 0, "watchlist cleanup succeeds");
+    assertEq(retained.processedPaths.length, 1, "cleanup performs one atomic note write");
+    assertTrue(
+      !retainedContent.includes("trakt_watchlist:"),
+      "stale watchlist flag is removed from retained note",
+    );
+    assertTrue(
+      !retainedContent.includes("trakt_watchlist_added_at:"),
+      "stale watchlist timestamp is removed from retained note",
+    );
+    assertTrue(
+      !retainedContent.includes("trakt/watchlist"),
+      "watchlist tag and tag-note link are removed",
+    );
+    assertTrue(retainedContent.includes("personal/keep"), "unrelated tag is preserved");
+    assertTrue(retainedContent.includes("custom_field: keep"), "custom frontmatter is preserved");
+    assertTrue(
+      retainedContent.endsWith("# Personal notes\nDo not change this body.\n"),
+      "personal note body is byte-preserved",
+    );
+
+    // Disabling the source (or media type) makes absence non-authoritative;
+    // no local watchlist state may be cleared in that configuration.
+    const disabled = makeRetainedApp();
+    const disabledEngine = new SyncEngine(
+      disabled.app as never,
+      withSettings({
+        ...retainedSettings,
+        syncWatchlist: false,
+      }),
+      async () => undefined,
+    );
+    const disabledResult = await disabledEngine.sync();
+    assertEq(disabledResult.updated, 0, "disabled watchlist source performs no cleanup");
+    assertEq(disabled.processedPaths.length, 0, "disabled source does not write the note");
+    assertTrue(
+      (disabled.contents.get(disabled.file.path) ?? "").includes(
+        "trakt_watchlist: true",
+      ),
+      "disabled source preserves existing watchlist state",
+    );
+  }
+
   console.log(`\n${"=".repeat(60)}`);
   console.log(`Smoke results: ${passes} passed, ${failures} failed`);
   console.log("=".repeat(60));

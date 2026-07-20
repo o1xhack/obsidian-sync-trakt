@@ -44,7 +44,7 @@ These toggles live in **Settings -> Sync -> Sync sources**.
 
 | Toggle | Default | Type gate | Trakt endpoints | Adds to `merged` | Media note effect | Daily Note event |
 |---|---:|---|---|---|---|---|
-| Sync watchlist | on | `syncMovies`, `syncShows` | `/sync/watchlist/movies`, `/sync/watchlist/shows` | `watchlist`, `watchlist_added_at` | Creates or updates notes for items currently on the watchlist | `added_to_watchlist` on `listed_at` date |
+| Sync watchlist | on | `syncMovies`, `syncShows` | `/sync/watchlist/movies`, `/sync/watchlist/shows` | `watchlist`, `watchlist_added_at` | Creates or updates notes for current members; clears stale watchlist fields/tags from retained notes when an item leaves the list | `added_to_watchlist` on `listed_at` date |
 | Sync favorites | on | `syncMovies`, `syncShows` | `/sync/favorites/movies`, `/sync/favorites/shows` | `favorite`, `favorited_at` | Creates or updates notes for favorited items | `favorited` on `listed_at` date |
 | Sync watch history | off | `syncMovies`, `syncShows` | `/sync/watched/movies`, `/sync/watched/shows` | `watched`, `plays`, `last_watched_at`, `episodes_watched` | Creates or updates notes for watched items | No per-day event by itself |
 | Sync watch history (detailed) | off | Requires Sync watch history and type gate | `/sync/history/movies`, `/sync/history/episodes` | `watch_history_movie`, `watch_history_episodes`; can seed history-only items into `merged` | Adds detailed watch-history body sections and can create notes for history-only items | `watched` events on every `watched_at` timestamp |
@@ -56,6 +56,12 @@ Important boundaries:
   toggle is on.
 - `syncShows=false` means no show endpoints are called, even if a source
   toggle is on.
+- An enabled watchlist endpoint is authoritative for absence. If a movie or
+  show leaves the watchlist, full sync clears its watchlist fields and tags.
+  With **Remove notes for deleted items** off, the media note and its body are
+  preserved; with the setting on, a note absent from every enabled source is
+  moved to trash by the existing removal path. Disabling **Sync watchlist** or
+  the corresponding media type disables this absence reconciliation.
 - Detailed watch history is event-level data. It updates `historyState`
   first, then hydrates matching `NormalizedItem`s. If a history event
   contains a show or movie that was not returned by watched/watchlist/
