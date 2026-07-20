@@ -3966,6 +3966,30 @@ void (async () => {
       legacyPrefix.path,
       "identity lookup recognizes a managed note after propertyPrefix changes",
     );
+
+    const manualTraktLink = new stub.TFile() as InstanceType<typeof stub.TFile> & {
+      basename: string;
+    };
+    manualTraktLink.path = "Trakt/Manual Trakt Link.md";
+    manualTraktLink.name = "Manual Trakt Link.md";
+    manualTraktLink.basename = "Manual Trakt Link";
+    manualTraktLink.extension = "md";
+    app.vault = {
+      cachedRead: async () =>
+        "---\nmedia_type: movie\nmedia_id: 54321\nmedia_url: https://trakt.tv/movies/manual-link\n---\n",
+    };
+    const unrelatedMatch = await findMatchingIdentityFile(
+      app as never,
+      "custom_",
+      "movie",
+      54321,
+      [manualTraktLink],
+    );
+    assertEq(
+      unrelatedMatch,
+      null,
+      "legacy-prefix fallback ignores a manual Trakt-link note without a plugin-owned marker",
+    );
   }
 
   // ── Test 61c: dedupeDuplicateNotes respects identity + current template ─

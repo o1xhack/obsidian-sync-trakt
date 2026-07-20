@@ -205,11 +205,12 @@ function hasManagedNoteSignature(
   propertyPrefix: string,
 ): boolean {
   const traktUrl = frontmatter[`${propertyPrefix}url`] || "";
-  if (traktUrl.includes("trakt.tv/")) return true;
+  const syncedAt = frontmatter[`${propertyPrefix}synced_at`] || "";
+  if (syncedAt && traktUrl.includes("trakt.tv/")) return true;
 
-  // Older/custom templates may omit the URL, but plugin-created notes still
-  // carry this combination. Requiring all three avoids mistaking a user's
-  // unrelated `id` + `type` frontmatter pair for a Sync Trakt identity.
+  // Older/custom notes may omit the URL, but plugin-created notes still carry
+  // this combination. In both branches `synced_at` is the plugin-owned marker
+  // that keeps an unrelated Trakt-link note from being claimed as ours.
   return ["title", "slug", "synced_at"].every(
     (suffix) => !!frontmatter[`${propertyPrefix}${suffix}`],
   );
