@@ -5015,7 +5015,7 @@ void (async () => {
       tokenExpiresAt: Date.now() + 86_400_000,
       syncMovies: false,
       syncShows: true,
-      syncWatchlist: false,
+      syncWatchlist: true,
       syncWatched: true,
       syncWatchedDetail: true,
       syncFavorites: false,
@@ -5035,6 +5035,11 @@ void (async () => {
       "history-only watched show is included in merged items",
     );
     assertEq(result.items[0].watched, true, "history-only show is marked watched");
+    assertEq(
+      result.items[0].watchlist,
+      false,
+      "history-only show absent from the authoritative watchlist is marked removed",
+    );
     assertEq(
       result.items[0].episodes_watched,
       1,

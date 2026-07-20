@@ -310,10 +310,9 @@ function getOrCreateItem(
  */
 function markMissingWatchlistItems(
   map: Map<string, NormalizedItem>,
-  type: ItemType,
 ): void {
   for (const item of map.values()) {
-    if (item.type === type && item.watchlist === undefined) {
+    if (item.watchlist === undefined) {
       item.watchlist = false;
       item.watchlist_added_at = undefined;
     }
@@ -923,6 +922,13 @@ export class SyncEngine {
         }
       }
 
+      // The enabled watchlist endpoints are authoritative for absence, but
+      // only after every source has seeded `merged`. Detailed-history-only
+      // items are added above and must also have stale membership cleared.
+      if (this.settings.syncWatchlist) {
+        markMissingWatchlistItems(merged);
+      }
+
       // 4. Apply persistent history state to in-memory items so the note
       //    renderer sees the watch_history_* fields.
       applyHistoryStateToItems(this.settings.historyState, merged.values());
@@ -1037,6 +1043,10 @@ export class SyncEngine {
         }
       }
 
+      if (this.settings.syncWatchlist) {
+        markMissingWatchlistItems(merged);
+      }
+
       applyHistoryStateToItems(this.settings.historyState, merged.values());
       const items = [...merged.values()];
       await this.enrichMetadata(items, onProgress);
@@ -1145,9 +1155,6 @@ export class SyncEngine {
       item.rated_at = raw.rated_at;
     }
 
-    if (this.settings.syncWatchlist) {
-      markMissingWatchlistItems(map, "movie");
-    }
   }
 
   /**
@@ -1205,9 +1212,6 @@ export class SyncEngine {
       item.rated_at = raw.rated_at;
     }
 
-    if (this.settings.syncWatchlist) {
-      markMissingWatchlistItems(map, "show");
-    }
   }
 
   /**
