@@ -41,6 +41,23 @@ export async function processWithConcurrency<T>(
 }
 
 /**
+ * Let Obsidian render and drain its indexing/sync queues between large write
+ * batches. Vault writes are asynchronous, but a long chain of immediately
+ * resolved write promises can still monopolize the main thread on large
+ * first-time rebuilds.
+ */
+export async function yieldToEventLoopEvery(
+  completed: number,
+  batchSize: number,
+): Promise<boolean> {
+  if (completed <= 0 || batchSize <= 0 || completed % batchSize !== 0) {
+    return false;
+  }
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  return true;
+}
+
+/**
  * Simple {{variable}} template interpolation.
  * Arrays are joined with ", ". Null/undefined become empty string.
  */
@@ -129,7 +146,14 @@ export function parseFrontmatter(content: string): {
   frontmatter: Record<string, string>;
   body: string;
 } {
-  const match = content.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
+  // Vaults can contain notes written on different operating systems. Match
+  // both LF and CRLF, tolerate a UTF-8 BOM, and allow harmless whitespace on
+  // delimiter lines. Identity lookup and dedupe both depend on this parser:
+  // treating a valid cross-platform note as "no frontmatter" makes the sync
+  // engine create a second `Title [trakt_id] (year).md` copy.
+  const match = content.match(
+    /^(?:\uFEFF)?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n)?([\s\S]*)$/,
+  );
   if (!match) {
     return { frontmatter: {}, body: content };
   }
@@ -138,7 +162,7 @@ export function parseFrontmatter(content: string): {
   const body = match[2];
   const frontmatter: Record<string, string> = {};
 
-  for (const line of yamlStr.split("\n")) {
+  for (const line of yamlStr.split(/\r?\n/)) {
     // Skip array items and empty lines
     if (line.startsWith("  -") || line.trim() === "") continue;
     const colonIdx = line.indexOf(":");

@@ -44,6 +44,7 @@ import {
   renderTemplate,
   parseFrontmatter,
   processWithConcurrency,
+  yieldToEventLoopEvery,
 } from "./utils";
 import {
   applyHistoryStateToItems,
@@ -68,6 +69,10 @@ const TMDB_CONCURRENCY = 5;
  * is comfortably below the limit.
  */
 const TRAKT_TRANSLATION_CONCURRENCY = 5;
+
+/** Give Obsidian's UI, metadata index, and vault-sync queue breathing room
+ * during large initial imports or rebuilds. */
+const NOTE_WRITE_BATCH_SIZE = 25;
 
 /**
  * [0.9.0] Extract the base language code from a BCP-47 string. `zh-CN` → `zh`,
@@ -177,6 +182,79 @@ function applyTranslation(
 
 function itemKey(type: ItemType, traktId: number): string {
   return `${type}:${traktId}`;
+}
+
+export interface NoteIdentity {
+  type: ItemType;
+  traktId: number;
+  propertyPrefix: string;
+}
+
+function identityAtPrefix(
+  frontmatter: Record<string, string>,
+  propertyPrefix: string,
+): NoteIdentity | null {
+  const traktId = parseInt(frontmatter[`${propertyPrefix}id`], 10);
+  const type = frontmatter[`${propertyPrefix}type`];
+  if (isNaN(traktId) || (type !== "movie" && type !== "show")) return null;
+  return { type, traktId, propertyPrefix };
+}
+
+function hasManagedNoteSignature(
+  frontmatter: Record<string, string>,
+  propertyPrefix: string,
+): boolean {
+  const traktUrl = frontmatter[`${propertyPrefix}url`] || "";
+  if (traktUrl.includes("trakt.tv/")) return true;
+
+  // Older/custom templates may omit the URL, but plugin-created notes still
+  // carry this combination. Requiring all three avoids mistaking a user's
+  // unrelated `id` + `type` frontmatter pair for a Sync Trakt identity.
+  return ["title", "slug", "synced_at"].every(
+    (suffix) => !!frontmatter[`${propertyPrefix}${suffix}`],
+  );
+}
+
+/**
+ * Read a media-note identity using the active property prefix first, then
+ * detect a prior prefix when the user changed that setting. Without the
+ * fallback, every existing note becomes invisible at once and the collision
+ * path creates `[trakt_id]` copies instead of updating the originals.
+ */
+export function noteIdentityFromFrontmatter(
+  frontmatter: Record<string, string>,
+  propertyPrefix: string,
+): NoteIdentity | null {
+  const preferred = identityAtPrefix(frontmatter, propertyPrefix);
+  if (preferred) return preferred;
+
+  const candidates: NoteIdentity[] = [];
+  for (const key of Object.keys(frontmatter)) {
+    if (!key.endsWith("type")) continue;
+    const candidatePrefix = key.slice(0, -"type".length);
+    if (candidatePrefix === propertyPrefix) continue;
+    const candidate = identityAtPrefix(frontmatter, candidatePrefix);
+    if (
+      candidate &&
+      hasManagedNoteSignature(frontmatter, candidatePrefix)
+    ) {
+      candidates.push(candidate);
+    }
+  }
+
+  if (candidates.length === 0) return null;
+  const [first] = candidates;
+  if (
+    candidates.some(
+      (candidate) =>
+        candidate.type !== first.type || candidate.traktId !== first.traktId,
+    )
+  ) {
+    // Conflicting identity families are ambiguous; refusing to guess is safer
+    // than binding an unrelated note to a Trakt item.
+    return null;
+  }
+  return first;
 }
 
 function lastTimestamp(timestamps: ReadonlyArray<string>): string | undefined {
@@ -390,31 +468,27 @@ function itemFromFrontmatter(
   frontmatter: Record<string, string>,
   propertyPrefix: string,
 ): NormalizedItem | null {
-  const idKey = `${propertyPrefix}id`;
-  const typeKey = `${propertyPrefix}type`;
-  const titleKey = `${propertyPrefix}title`;
-  const originalTitleKey = `${propertyPrefix}original_title`;
-  const yearKey = `${propertyPrefix}year`;
-  const slugKey = `${propertyPrefix}slug`;
-  const imdbKey = `${propertyPrefix}imdb_id`;
-  const tmdbKey = `${propertyPrefix}tmdb_id`;
-
-  const traktId = parseInt(frontmatter[idKey], 10);
-  const type = frontmatter[typeKey];
-  if (isNaN(traktId)) return null;
-  if (type !== "movie" && type !== "show") return null;
+  const identity = noteIdentityFromFrontmatter(frontmatter, propertyPrefix);
+  if (!identity) return null;
+  const detectedPrefix = identity.propertyPrefix;
+  const titleKey = `${detectedPrefix}title`;
+  const originalTitleKey = `${detectedPrefix}original_title`;
+  const yearKey = `${detectedPrefix}year`;
+  const slugKey = `${detectedPrefix}slug`;
+  const imdbKey = `${detectedPrefix}imdb_id`;
+  const tmdbKey = `${detectedPrefix}tmdb_id`;
 
   const tmdbId = parseInt(frontmatter[tmdbKey], 10);
 
   // Build a minimal NormalizedItem just for filename rendering.
   // Properties not consulted by the template are left as empty defaults.
   return {
-    type,
+    type: identity.type,
     title: frontmatter[titleKey] || "",
     originalTitle: frontmatter[originalTitleKey] || "",
     year: parseInt(frontmatter[yearKey], 10) || 0,
     ids: {
-      trakt: traktId,
+      trakt: identity.traktId,
       slug: frontmatter[slugKey] || "",
       imdb: frontmatter[imdbKey] || "",
       tmdb: isNaN(tmdbId) ? 0 : tmdbId,
@@ -449,7 +523,10 @@ export type DedupeDuplicateNotesResult = {
 };
 
 function syncedAtMs(frontmatter: Record<string, string>, propertyPrefix: string): number {
-  const raw = frontmatter[`${propertyPrefix}synced_at`];
+  const detectedPrefix =
+    noteIdentityFromFrontmatter(frontmatter, propertyPrefix)?.propertyPrefix ??
+    propertyPrefix;
+  const raw = frontmatter[`${detectedPrefix}synced_at`];
   const parsed = raw ? Date.parse(raw) : NaN;
   return isNaN(parsed) ? 0 : parsed;
 }
@@ -618,19 +695,18 @@ async function scanExistingNotes(
   const folder = app.vault.getAbstractFileByPath(folderPath);
   if (!(folder instanceof TFolder)) return map;
 
-  const idKey = `${propertyPrefix}id`;
-  const typeKey = `${propertyPrefix}type`;
-
   for (const child of folder.children) {
     if (!(child instanceof TFile) || child.extension !== "md") continue;
     const content = await app.vault.cachedRead(child);
     const { frontmatter } = parseFrontmatter(content);
-    const traktId = parseInt(frontmatter[idKey], 10);
-    const type = frontmatter[typeKey];
-    if (!isNaN(traktId) && (type === "movie" || type === "show")) {
-      const key = itemKey(type, traktId);
+    const identity = noteIdentityFromFrontmatter(frontmatter, propertyPrefix);
+    if (identity) {
+      const key = itemKey(identity.type, identity.traktId);
       const existing = map.get(key);
-      if (!existing || preferIdentityFile(child, existing, traktId)) {
+      if (
+        !existing ||
+        preferIdentityFile(child, existing, identity.traktId)
+      ) {
         map.set(key, child);
       }
     }
@@ -659,8 +735,6 @@ export async function findMatchingIdentityFile(
   traktId: number,
   files: TFile[],
 ): Promise<TFile | null> {
-  const idKey = `${propertyPrefix}id`;
-  const typeKey = `${propertyPrefix}type`;
   let match: TFile | null = null;
   const seen = new Set<string>();
 
@@ -670,9 +744,8 @@ export async function findMatchingIdentityFile(
 
     const content = await app.vault.cachedRead(child);
     const { frontmatter } = parseFrontmatter(content);
-    const noteId = parseInt(frontmatter[idKey], 10);
-    const noteType = frontmatter[typeKey];
-    if (noteId !== traktId || noteType !== type) continue;
+    const identity = noteIdentityFromFrontmatter(frontmatter, propertyPrefix);
+    if (identity?.traktId !== traktId || identity.type !== type) continue;
     if (!match || preferIdentityFile(child, match, traktId)) {
       match = child;
     }
@@ -1358,6 +1431,7 @@ export class SyncEngine {
     const writeTotal = mergedItems.size;
     for (const [key, item] of mergedItems) {
       writeIndex++;
+      await yieldToEventLoopEvery(writeIndex - 1, NOTE_WRITE_BATCH_SIZE);
       // Throttle progress updates so we don't spam the status bar — every
       // 10 items, or on the last one, is enough to feel responsive.
       if (writeIndex % 10 === 0 || writeIndex === writeTotal) {
