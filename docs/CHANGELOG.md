@@ -7,6 +7,19 @@ plugin is submitted to Obsidian's official Community Plugins directory.
 
 For the full design rationale behind major changes, see [`specs/`](specs/).
 
+## Unreleased
+
+### Fixed
+
+- Full media sync now treats an enabled Trakt watchlist endpoint as
+  authoritative for removals as well as additions. When an item leaves the
+  watchlist, its stale `trakt_watchlist`, `trakt_watchlist_added_at`,
+  `#trakt/watchlist`, and watchlist tag-note link are cleared even when the
+  media note is retained because **Remove notes for deleted items** is off.
+- Watchlist cleanup remains scoped to enabled media types and never runs when
+  **Sync watchlist** is disabled, so a disabled source cannot erase local
+  state based on an absence it did not fetch.
+
 ## 1.3.1 — 2026-07-20
 
 **Safer cross-platform note reconciliation.** This patch fixes duplicate

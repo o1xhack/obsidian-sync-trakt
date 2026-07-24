@@ -301,6 +301,67 @@ function getOrCreateItem(
   return item;
 }
 
+/**
+ * An enabled list endpoint is authoritative for both membership and absence.
+ * Trakt only returns current members, so items introduced by another enabled
+ * source must be explicitly marked false when they are absent from the
+ * watchlist response. The renderer turns this internal false marker into
+ * deletion of the on-disk watchlist fields.
+ */
+function markMissingWatchlistItems(
+  map: Map<string, NormalizedItem>,
+): void {
+  for (const item of map.values()) {
+    if (item.watchlist === undefined) {
+      item.watchlist = false;
+      item.watchlist_added_at = undefined;
+    }
+  }
+}
+
+function withoutStringValue(
+  value: unknown,
+  shouldRemove: (entry: string) => boolean,
+): string[] | null | undefined {
+  if (!Array.isArray(value) || !value.every((entry) => typeof entry === "string")) {
+    return undefined;
+  }
+  const filtered = value.filter((entry) => !shouldRemove(entry));
+  if (filtered.length === value.length) return undefined;
+  return filtered.length > 0 ? filtered : null;
+}
+
+function watchlistCleanupData(
+  existingFm: Record<string, unknown>,
+  settings: TraktrSettings,
+  propertyPrefix: string,
+): Record<string, unknown> {
+  const data: Record<string, unknown> = {
+    [`${propertyPrefix}watchlist`]: null,
+    [`${propertyPrefix}watchlist_added_at`]: null,
+  };
+
+  if (settings.addTags) {
+    const watchlistTag = `${settings.tagPrefix}/watchlist`;
+    const tags = withoutStringValue(
+      existingFm.tags,
+      (entry) => entry === watchlistTag,
+    );
+    if (tags !== undefined) data.tags = tags;
+  }
+
+  if (settings.addTagNotes) {
+    const tagNotesKey = `${propertyPrefix}tag_notes`;
+    const tagNotes = withoutStringValue(
+      existingFm[tagNotesKey],
+      (entry) => /^\[\[(?:.*\/)?watchlist(?:\|[^\]]+)?\]\]$/.test(entry),
+    );
+    if (tagNotes !== undefined) data[tagNotesKey] = tagNotes;
+  }
+
+  return data;
+}
+
 // ── Folder & file helpers ──
 
 async function ensureFolder(app: App, path: string): Promise<void> {
@@ -861,6 +922,13 @@ export class SyncEngine {
         }
       }
 
+      // The enabled watchlist endpoints are authoritative for absence, but
+      // only after every source has seeded `merged`. Detailed-history-only
+      // items are added above and must also have stale membership cleared.
+      if (this.settings.syncWatchlist) {
+        markMissingWatchlistItems(merged);
+      }
+
       // 4. Apply persistent history state to in-memory items so the note
       //    renderer sees the watch_history_* fields.
       applyHistoryStateToItems(this.settings.historyState, merged.values());
@@ -975,6 +1043,10 @@ export class SyncEngine {
         }
       }
 
+      if (this.settings.syncWatchlist) {
+        markMissingWatchlistItems(merged);
+      }
+
       applyHistoryStateToItems(this.settings.historyState, merged.values());
       const items = [...merged.values()];
       await this.enrichMetadata(items, onProgress);
@@ -1082,6 +1154,7 @@ export class SyncEngine {
       item.my_rating = raw.rating;
       item.rated_at = raw.rated_at;
     }
+
   }
 
   /**
@@ -1138,6 +1211,7 @@ export class SyncEngine {
       item.my_rating = raw.rating;
       item.rated_at = raw.rated_at;
     }
+
   }
 
   /**
@@ -1671,6 +1745,72 @@ export class SyncEngine {
         const msg = `Failed to sync "${item.title}" (${item.type} ${item.ids.trakt}): ${e instanceof Error ? e.message : String(e)}`;
         result.errors.push(msg);
         console.error("[Traktr]", msg, e);
+      }
+    }
+
+    // An item can disappear from every enabled source while its note is kept
+    // (`deleteRemovedItems=false`, the default). The current watchlist
+    // endpoint is still authoritative in that case: clear the stale
+    // membership fields/tags without deleting the note or touching its body.
+    if (this.settings.syncWatchlist && !this.settings.deleteRemovedItems) {
+      for (const [key, file] of localNotes) {
+        if (mergedItems.has(key)) continue;
+        const typeEnabled = key.startsWith("movie:")
+          ? this.settings.syncMovies
+          : key.startsWith("show:")
+            ? this.settings.syncShows
+            : false;
+        if (!typeEnabled) continue;
+
+        try {
+          const currentContent = await this.app.vault.cachedRead(file);
+          const parsedFm = parseFrontmatter(currentContent).frontmatter;
+          const identity = noteIdentityFromFrontmatter(
+            parsedFm,
+            this.settings.propertyPrefix,
+          );
+          if (!identity) continue;
+
+          const cached = this.app.metadataCache.getFileCache(file);
+          const existingFm =
+            (cached?.frontmatter as Record<string, unknown> | undefined) ??
+            parsedFm;
+          const cleanupData = watchlistCleanupData(
+            existingFm,
+            this.settings,
+            identity.propertyPrefix,
+          );
+          const watchlistKey = `${identity.propertyPrefix}watchlist`;
+          const watchlistAddedAtKey =
+            `${identity.propertyPrefix}watchlist_added_at`;
+          const hasDirectState =
+            watchlistKey in parsedFm || watchlistAddedAtKey in parsedFm;
+          const hasListState = Object.keys(cleanupData).some(
+            (cleanupKey) =>
+              cleanupKey !== watchlistKey &&
+              cleanupKey !== watchlistAddedAtKey,
+          );
+          if (!hasDirectState && !hasListState) continue;
+
+          const writeData = {
+            ...cleanupData,
+            [`${identity.propertyPrefix}synced_at`]: new Date().toISOString(),
+          };
+          const updatedContent = mergeFrontmatterIntoContent(
+            currentContent,
+            writeData,
+          );
+          if (updatedContent === currentContent) continue;
+          await this.app.vault.process(file, (latestContent) =>
+            mergeFrontmatterIntoContent(latestContent, writeData),
+          );
+          result.updated++;
+        } catch (e) {
+          result.failed++;
+          const msg = `Failed to clear removed watchlist state from "${file.name}": ${e instanceof Error ? e.message : String(e)}`;
+          result.errors.push(msg);
+          console.error("[Traktr]", msg, e);
+        }
       }
     }
 

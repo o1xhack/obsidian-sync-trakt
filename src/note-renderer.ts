@@ -294,10 +294,13 @@ export function buildFrontmatterData(
 
   // Source flags
   if (item.watchlist !== undefined) {
-    data[`${p}watchlist`] = item.watchlist;
-    if (item.watchlist_added_at) {
-      data[`${p}watchlist_added_at`] = item.watchlist_added_at;
-    }
+    // `false` is an internal authoritative-absence marker. Keep the on-disk
+    // contract sparse: a movie/show that is no longer on the watchlist has
+    // both watchlist fields removed instead of retaining stale `true` data.
+    data[`${p}watchlist`] = item.watchlist ? true : null;
+    data[`${p}watchlist_added_at`] = item.watchlist
+      ? item.watchlist_added_at || null
+      : null;
   }
 
   if (item.watched !== undefined) {
