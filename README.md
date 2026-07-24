@@ -19,11 +19,12 @@
 
 - **Detailed watch history** — exactly which episode you watched at what time, including re-watches, kept in sync as you keep watching
 - **Metadata in 15+ languages** — translate titles / overviews / taglines / genres via TMDB. Built-in presets for Chinese (CN / TW / HK), Japanese, Korean, French, German, Spanish (ES / MX), Portuguese (BR), Italian, Russian — plus a custom mode for any TMDB-supported locale. **Strict primary + user-defined fallback** (e.g. zh-CN with English fallback) prevents silent zh-TW substitutions when the primary translation is missing. English originals always preserved in `*_original_*` frontmatter fields
+- **Flexible poster sources** — choose `Auto`, `TMDB only`, or `OMDb only`. Auto keeps TMDB first and falls back to OMDb by IMDb ID when TMDB has no poster. OMDb is poster-only, so it never overrides Trakt/TMDB titles, translations, genres, or ratings
 - **Filenames follow your language** — switch metadata language and existing notes auto-rename on the next sync to match the new title. Internal Obsidian links update automatically. One-shot "Rename now" button in settings for manual triggers
 - **Note templates in 11 languages** — hand-curated bundled templates (en + zh-CN + zh-TW + ja + ko + fr + de + it + es + pt-BR + ru). Pick from the template-language dropdown; switch any time without losing customizations
 - **Tabbed settings UI** — General / Notes / Sync / Daily Notes. Last-viewed tab remembered per device
 - **Daily Notes integration** — auto-injects per-event lines (watched / watchlist / favorited / rated) into your Daily Note on every sync, chronologically sorted, in your chosen template language. Marker-bounded region is fully isolated — content outside it is **never modified**. Optional incremental mode preserves your hand-written annotations inside the marker block. Manual date-range backfill with quick presets (Last 7 days / This month / etc.). Daily Notes can also run on their own auto-sync interval without rewriting media notes. See [spec 0006](docs/specs/0006-daily-notes-integration.md) and [spec 0011](docs/specs/0011-daily-notes-auto-sync.md)
-- **Fast incremental sync** — first sync seeds the local TMDB cache + Trakt history state; subsequent syncs only fetch what changed. Steady-state sync time drops from minutes to single-digit seconds. See [spec 0001](docs/specs/0001-incremental-sync.md)
+- **Fast incremental sync** — first sync seeds local TMDB/OMDb caches + Trakt history state; subsequent syncs reuse cached metadata and posters. Steady-state sync time drops from minutes to single-digit seconds. See [spec 0001](docs/specs/0001-incremental-sync.md)
 - **Quiet writes** — sync only rewrites notes whose content actually changed. After watching one new episode, a 1200-item library writes one note instead of all 1200 — your cross-device sync layer (Obsidian Sync / iCloud / Syncthing) stops re-uploading the entire library every run. See [spec 0002](docs/specs/0002-diff-based-write.md)
 - **Per-setting cloud toggle** — pick which settings sync across devices and which stay local. Auto-sync interval, startup-sync toggle, UI language — each can be device-local so your Mac and iPhone don't fight over them. See [spec 0003](docs/specs/0003-device-local-settings.md)
 
@@ -99,7 +100,7 @@ Each event type is gated by its corresponding sync source toggle — if `Sync fa
 **Manual backfill** uses a date-range picker with quick presets (Last 7 days / Last 30 days / This month / Last month). Live count shows how many Daily Notes actually exist in the picked range before you confirm. Configure folder + filename format (Moment.js syntax like `YYYY-MM-DD` or `YYYY/YYYY.MM.DD`) in **Settings → Daily Notes**. See [spec 0006](docs/specs/0006-daily-notes-integration.md).
 
 **Daily Notes-only auto-sync** can be enabled separately from full media
-auto-sync. It refreshes the Trakt/TMDB data needed for Daily Notes and
+auto-sync. It refreshes the Trakt/TMDB/OMDb data needed for Daily Notes and
 updates existing Daily Note files, but it does not create, rename,
 delete, or rewrite media notes. The Daily-only timer and the full sync
 timer share one lock, so if they fire together, one run skips instead of
@@ -111,12 +112,12 @@ writing concurrently.
 
 ## 🔄 Cross-device sync
 
-Auth state — Trakt tokens, TMDB key, all settings — lives in `<vault>/.obsidian/plugins/sync-trakt/data.json` and follows your vault-sync layer. Configure auth once on Mac, share with iPhone via Obsidian Sync (with `Plugin data` enabled), Syncthing, iCloud + Advanced Data Protection, or Cryptomator. The plugin doesn't store anything on a server.
+Auth state — Trakt tokens, TMDB/OMDb keys, all settings — lives in `<vault>/.obsidian/plugins/sync-trakt/data.json` and follows your vault-sync layer. Configure auth once on Mac, share with iPhone via Obsidian Sync (with `Plugin data` enabled), Syncthing, iCloud + Advanced Data Protection, or Cryptomator. The plugin doesn't store anything on a server.
 
-Large rebuildable runtime caches, including TMDB metadata and detailed
+Large rebuildable runtime caches, including TMDB metadata, OMDb posters, and detailed
 watch-history aggregates, live outside the vault in each device's local
 Obsidian app storage. They are not uploaded to Obsidian Sync, and each
-device can rebuild them from Trakt/TMDB if cleared. A small synced
+device can rebuild them from Trakt/TMDB/OMDb if cleared. A small synced
 full-refresh coordinator keeps devices from writing detailed history from
 an older local cache after another device has detected Trakt-side
 deletions.

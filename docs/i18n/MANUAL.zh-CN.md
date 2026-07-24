@@ -78,14 +78,19 @@
 | Trakt Client Secret | 来自同一个应用页面。 |
 | Connection status | 显示当前状态；提供连接或断开按钮。 |
 
-### TMDB（海报图片）
+### 元数据与海报服务
 
 | 设置项 | 默认值 | 说明 |
 |---|---|---|
-| TMDB API key | _(空)_ | 可选。留空则跳过海报图片。 |
-| Poster size | `w500` | 从 TMDB 拉取的图片宽度变体。可选：w92、w154、w185、w342、w500、w780、original。 |
+| TMDB API key | _(空)_ | 推荐用于完整的元数据本地化和 TMDB 海报。未填写时，本地化回退到 Trakt；配置 OMDb 后仍可获取海报。 |
+| Poster source | `Auto (TMDB → OMDb)` | `Auto` 优先使用 TMDB，TMDB 没有海报时回退到 OMDb。`TMDB only` 和 `OMDb only` 只使用指定服务获取海报。翻译来源与此设置相互独立。 |
+| Poster size | `w500` | 从 TMDB 拉取的图片宽度变体。OMDb 的图片分辨率由 OMDb 决定。可选：w92、w154、w185、w342、w500、w780、original。 |
 | TMDB cache TTL | `90 天` | 缓存的 TMDB 元数据多久之后会被重新验证。**永不过期**则保持缓存不变（只能手动清空）。过期条目会立即返回旧值并在后台异步刷新，同步永远不会被阻塞。每条目附加 ±5 天随机抖动，1000+ 条目不会同一天集体过期。详见 [spec 0001](../specs/0001-incremental-sync.md) §A。 |
-| Clear cache | _(按钮)_ | 丢弃所有已缓存的元数据。下次同步会从 TMDB 重新拉取全部条目（大库可能需要几分钟）。设置项的描述里会显示当前缓存的条目数。 |
+| Clear cache | _(按钮)_ | 丢弃所有已缓存的 TMDB 元数据。下次同步会从 TMDB 重新拉取全部条目（大库可能需要几分钟）。设置项的描述里会显示当前缓存的条目数。 |
+| OMDb API key | _(空)_ | 可选的海报专用回退。免费 key 每天最多 1,000 次请求。专用高分辨率 Poster API 仅供 Patreon 用户使用；普通结果的分辨率可能较低，也可能没有图片。查询必须有 IMDb ID。 |
+| Clear OMDb cache | _(按钮)_ | 清空按服务区分的本地海报缓存。成功查询（包括已知没有海报的结果）会缓存 90 天。 |
+
+OMDb 内容按 [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) 发布。Sync Trakt 只保存普通标题数据响应中的海报 URL，不使用 Patreon 专属的高分辨率 Poster API。
 
 ### Localization
 
@@ -98,7 +103,7 @@
 
 启用本地化后，同步按以下顺序解析翻译：
 
-1. **TMDB**（首选）—— 一次合并请求拿回本地化的 `title` / `overview` / `tagline` / `genres` 加上海报 URL。需要 TMDB API key。
+1. **TMDB**（首选）—— 一次合并请求拿回本地化的 `title` / `overview` / `tagline` / `genres`。需要 TMDB API key；海报来源通过 **Poster source** 独立选择。
 2. **Trakt `/translations/{lang}`**（回退）—— 没填 TMDB API key 时使用。只覆盖 `title` / `overview` / `tagline`，`genres` 保持英文。
 3. **英文原文** —— 两个 API 都没有翻译时按字段回退。
 

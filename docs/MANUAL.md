@@ -82,14 +82,23 @@ Access tokens are refreshed automatically before each sync (no manual re-authent
 | Trakt Client Secret | From the same application page. |
 | Connection status | Shows current state; buttons to connect or disconnect. |
 
-### TMDB (poster images)
+### Metadata and poster providers
 
 | Setting | Default | Description |
 |---|---|---|
-| TMDB API key | _(blank)_ | Optional. Leave blank to skip poster images. |
-| Poster size | `w500` | Image width variant fetched from TMDB. Options: w92, w154, w185, w342, w500, w780, original. |
+| TMDB API key | _(blank)_ | Recommended for complete metadata localization and TMDB posters. Without it, localization falls back to Trakt and posters can still use OMDb. |
+| Poster source | `Auto (TMDB → OMDb)` | `Auto` uses TMDB first and falls back to OMDb when no TMDB poster is available. `TMDB only` and `OMDb only` never query the other provider for posters. Translation remains independent. |
+| Poster size | `w500` | Image width variant fetched from TMDB. OMDb controls its own image resolution. Options: w92, w154, w185, w342, w500, w780, original. |
 | TMDB cache TTL | `90 days` | How long cached TMDB metadata stays fresh before being revalidated. **Never expire** keeps entries indefinitely (only manually cleared). Stale entries are returned immediately and refreshed in the background, so syncs are never blocked. Each entry gets ±5 days jitter, so 1000+ items don't all expire on the same day. See [spec 0001](specs/0001-incremental-sync.md) §A. |
-| Clear cache | _(button)_ | Drops every cached metadata entry. The next sync re-fetches everything from TMDB (takes a few minutes for large libraries). The setting label shows the current entry count. |
+| Clear cache | _(button)_ | Drops every cached TMDB metadata entry. The next sync re-fetches everything from TMDB (takes a few minutes for large libraries). The setting label shows the current entry count. |
+| OMDb API key | _(blank)_ | Optional poster-only fallback. Free keys allow 1,000 requests/day. The dedicated high-resolution Poster API requires Patreon; regular results may be lower resolution or missing. Queries require an IMDb ID. |
+| Clear OMDb cache | _(button)_ | Drops the provider-specific local poster cache. Successful lookups, including titles with no poster, are cached for 90 days. |
+
+OMDb content is published under
+[CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). Sync Trakt
+uses the regular title-data response and stores only the returned poster URL;
+it does not use or promise access to OMDb's patron-only high-resolution Poster
+API.
 
 ### Localization
 
@@ -102,7 +111,7 @@ Optional. Translate `title`, `overview`, `tagline`, and `genres` in synced notes
 
 When localization is enabled, sync resolves translations in this order:
 
-1. **TMDB** (preferred) — one combined call per item that returns the localized `title` / `overview` / `tagline` / `genres` plus the poster URL. Requires a TMDB API key.
+1. **TMDB** (preferred) — one combined call per item that returns the localized `title` / `overview` / `tagline` / `genres` and, depending on the selected poster source, a poster URL. Requires a TMDB API key.
 2. **Trakt `/translations/{lang}`** (fallback) — used when no TMDB API key is configured. Covers `title` / `overview` / `tagline` only; `genres` stay in English.
 3. **English original** — used field-by-field when neither API has a translation in the requested language.
 

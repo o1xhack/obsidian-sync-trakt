@@ -13,9 +13,15 @@ import type { ReleaseHighlight, ReleaseLogEntry } from "./release-log";
 import {
   EMPTY_HISTORY_STATE,
   type HistoryState,
+  type OmdbPosterCache,
   type TmdbCache,
 } from "./types";
 import { clearTmdbCache, tmdbCacheStats, verifyTmdbApiKey } from "./tmdb-api";
+import {
+  clearOmdbPosterCache,
+  omdbPosterCacheStats,
+  verifyOmdbApiKey,
+} from "./omdb-api";
 import { clearHistoryState, historyStateStats } from "./history-state";
 import {
   manualBackfill,
@@ -40,6 +46,7 @@ export const POSTER_SIZES = [
 ] as const;
 
 export type PosterSize = (typeof POSTER_SIZES)[number];
+export type PosterSource = "auto" | "tmdb" | "omdb";
 
 export const BUILD_CREATED_AT = "2026-05-21 15:35:00 PDT";
 
@@ -287,8 +294,10 @@ export interface TraktrSettings {
   refreshToken: string;
   tokenExpiresAt: number;
 
-  // TMDB
+  // Poster providers + TMDB localization
   tmdbApiKey: string;
+  omdbApiKey: string;
+  posterSource: PosterSource;
   posterSize: PosterSize;
 
   // Localization (i18n)
@@ -376,6 +385,9 @@ export interface TraktrSettings {
   // 0 = never expire. Otherwise the configured days, ±5 days jitter per
   // entry to avoid 1000+ entries all expiring on the same day.
   tmdbCacheTtlDays: number;
+  // OMDb posters use a separate local runtime cache. Entries are keyed by
+  // provider + IMDb id and revalidated after 90 days.
+  omdbPosterCache: OmdbPosterCache;
 
   // ── [0.2.0] History state for incremental Trakt history sync ──
   // Only meaningful when syncWatchedDetail is on. Stores aggregated
@@ -1188,6 +1200,8 @@ export const DEFAULT_SETTINGS: TraktrSettings = {
   tokenExpiresAt: 0,
 
   tmdbApiKey: "",
+  omdbApiKey: "",
+  posterSource: "auto",
   posterSize: "w500",
 
   metadataLanguage: "",
@@ -1234,6 +1248,7 @@ export const DEFAULT_SETTINGS: TraktrSettings = {
   // [0.2.0] TMDB cache + history state defaults
   tmdbCache: {},
   tmdbCacheTtlDays: 90,
+  omdbPosterCache: {},
   historyState: { ...EMPTY_HISTORY_STATE },
   historyFullRefreshIntervalDays: 7,
 
@@ -1785,6 +1800,21 @@ export class TraktrSettingTab extends PluginSettingTab {
     );
 
     new Setting(containerEl)
+      .setName(t("poster.source.name"))
+      .setDesc(t("poster.source.desc"))
+      .addDropdown((dd) =>
+        dd
+          .addOption("auto", t("poster.source.auto"))
+          .addOption("tmdb", t("poster.source.tmdb"))
+          .addOption("omdb", t("poster.source.omdb"))
+          .setValue(this.plugin.settings.posterSource)
+          .onChange(async (value) => {
+            this.plugin.settings.posterSource = value as PosterSource;
+            await this.plugin.saveSettings();
+          }),
+      );
+
+    new Setting(containerEl)
       .setName(t("tmdb.posterSize.name"))
       .setDesc(t("tmdb.posterSize.desc"))
       .addDropdown((dd) => {
@@ -1843,7 +1873,89 @@ export class TraktrSettingTab extends PluginSettingTab {
           }),
       );
 
-    }  // end of "general" tab — first half (Auth + TMDB)
+    // ── OMDb (optional poster fallback) ──
+    new Setting(containerEl).setName(t("omdb.heading")).setHeading();
+
+    new Setting(containerEl)
+      .setName(t("omdb.apiKey.name"))
+      .setDesc(t("omdb.apiKey.desc"))
+      .addText((text) =>
+        text
+          .setPlaceholder(t("omdb.apiKey.placeholder"))
+          .setValue(this.plugin.settings.omdbApiKey)
+          .onChange(async (value) => {
+            this.plugin.settings.omdbApiKey = value.trim();
+            await this.plugin.saveSettings();
+          }),
+      );
+
+    const omdbTestSetting = new Setting(containerEl)
+      .setName(t("omdb.apiKey.test.name"))
+      .setDesc(t("omdb.apiKey.test.desc"));
+    const omdbTestResultEl = omdbTestSetting.descEl.createDiv({
+      cls: "trakt-test-result",
+    });
+    omdbTestSetting.addButton((btn) =>
+      btn.setButtonText(t("omdb.apiKey.test.button")).onClick(async () => {
+        btn.setButtonText(t("omdb.apiKey.test.testing")).setDisabled(true);
+        omdbTestResultEl.empty();
+        omdbTestResultEl.classList.remove("is-ok", "is-error", "is-muted");
+        try {
+          const result = await verifyOmdbApiKey(this.plugin.settings.omdbApiKey);
+          if (result.ok) {
+            omdbTestResultEl.classList.add("is-ok");
+            omdbTestResultEl.setText(t("omdb.apiKey.test.ok"));
+          } else {
+            omdbTestResultEl.classList.add(
+              result.reason === "empty" ? "is-muted" : "is-error",
+            );
+            const key =
+              result.reason === "empty"
+                ? "omdb.apiKey.test.empty"
+                : result.reason === "unauthorized"
+                  ? "omdb.apiKey.test.unauthorized"
+                  : result.reason === "limit"
+                    ? "omdb.apiKey.test.limit"
+                    : "omdb.apiKey.test.network";
+            const base = t(key);
+            omdbTestResultEl.setText(
+              result.detail ? `${base} (${result.detail})` : base,
+            );
+          }
+        } finally {
+          btn.setButtonText(t("omdb.apiKey.test.button")).setDisabled(false);
+        }
+      }),
+    );
+
+    const omdbCacheStats = omdbPosterCacheStats(
+      this.plugin.settings.omdbPosterCache,
+    );
+    const omdbCacheStatsLabel = t("omdb.cache.entries", {
+      count: omdbCacheStats.entries,
+    });
+    new Setting(containerEl)
+      .setName(t("omdb.cache.clear.name"))
+      .setDesc(`${omdbCacheStatsLabel}\n\n${t("omdb.cache.clear.desc")}`)
+      .addButton((btn) =>
+        btn
+          .setButtonText(t("omdb.cache.clear.button"))
+          .setWarning()
+          .onClick(async () => {
+            const confirmed = await this.confirmAction({
+              title: "confirm.clearOmdb.title",
+              body: "confirm.clearOmdb.body",
+              confirm: "confirm.clearOmdb.confirm",
+            });
+            if (!confirmed) return;
+            clearOmdbPosterCache(this.plugin.settings.omdbPosterCache);
+            await this.plugin.saveSettings();
+            new Notice(t("omdb.cache.clear.notice"));
+            this.display();
+          }),
+      );
+
+    }  // end of "general" tab — first half (Auth + poster providers)
 
     if (this.activeTab === "notes") {
     // ── Localization ──
@@ -2568,6 +2680,7 @@ export class TraktrSettingTab extends PluginSettingTab {
               clientSecret,
               tokenExpiresAt,
               tmdbApiKey,
+              omdbApiKey,
               uiLanguage,
             } = this.plugin.settings;
             // Preserve auth + UI language across reset; everything else
@@ -2579,6 +2692,7 @@ export class TraktrSettingTab extends PluginSettingTab {
               clientSecret,
               tokenExpiresAt,
               tmdbApiKey,
+              omdbApiKey,
               uiLanguage,
             });
             await this.plugin.saveSettings();

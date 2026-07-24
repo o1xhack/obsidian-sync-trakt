@@ -9,6 +9,17 @@ For the full design rationale behind major changes, see [`specs/`](specs/).
 
 ## Unreleased
 
+### Added
+
+- Optional native OMDb poster support with `Auto`, `TMDB only`, and
+  `OMDb only` source modes. Auto mode keeps TMDB as the primary source and
+  falls back to OMDb by IMDb ID when TMDB is unavailable or has no poster.
+- OMDb key verification and a separate 90-day local runtime cache protect the
+  free API's 1,000-request daily limit. Missing-poster results are cached too,
+  so unavailable artwork is not requested on every sync.
+- Settings and documentation call out OMDb's IMDb-ID requirement,
+  CC BY-NC 4.0 terms, and patron-only high-resolution Poster API.
+
 ### Fixed
 
 - Full media sync now treats an enabled Trakt watchlist endpoint as

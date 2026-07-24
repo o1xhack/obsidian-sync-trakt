@@ -272,6 +272,20 @@ export interface TmdbCache {
   [key: string]: TmdbCacheEntry;
 }
 
+/** Poster-only OMDb cache entry. Kept separate from TMDB metadata so clearing
+ * one provider never invalidates the other and provider changes cannot return
+ * a URL from the wrong source. */
+export interface OmdbPosterCacheEntry {
+  cache_version?: number;
+  poster_url: string;
+  cached_at: number;
+  expires_at: number;
+}
+
+export interface OmdbPosterCache {
+  [key: string]: OmdbPosterCacheEntry;
+}
+
 export interface NormalizedItem {
   type: ItemType;
   title: string;
