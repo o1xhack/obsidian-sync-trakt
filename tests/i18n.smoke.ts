@@ -2431,7 +2431,7 @@ void (async () => {
 
     assertEq(await fetchOmdbPoster("tt0000001", "key", cache, session), "",
       "quota response returns no poster");
-    assertTrue(session.quotaExhausted,
+    assertEq(session.blockedReason, "limit",
       "quota response trips the current sync's circuit breaker");
     assertEq(await fetchOmdbPoster("tt0000002", "key", cache, session), "",
       "later lookup in the same sync short-circuits");
@@ -2455,6 +2455,68 @@ void (async () => {
     );
     assertEq(stub.requestUrlMock.calls.length, 1,
       "the circuit breaker does not persist across syncs");
+  }
+
+  console.log("\n[40d-3] OMDb auth failures block one sync; title misses cache");
+  {
+    const stub = await import("./stub-obsidian");
+    const cache: OmdbPosterCache = {};
+    const authSession = createOmdbRequestSession();
+    stub.resetRequestUrlMock(() => ({
+      status: 200,
+      json: { Response: "False", Error: "Invalid API key!" },
+      headers: {},
+    }));
+
+    assertEq(
+      await fetchOmdbPoster("tt0000003", "bad-key", cache, authSession),
+      "",
+      "authentication failure returns no poster",
+    );
+    assertEq(authSession.blockedReason, "unauthorized",
+      "authentication failure blocks the current sync");
+    assertEq(
+      await fetchOmdbPoster("tt0000004", "bad-key", cache, authSession),
+      "",
+      "later lookup in the same sync short-circuits after auth failure",
+    );
+    assertEq(stub.requestUrlMock.calls.length, 1,
+      "auth circuit breaker prevents repeated invalid-key requests");
+
+    stub.resetRequestUrlMock(() => ({
+      status: 200,
+      json: { Response: "False", Error: "Movie not found!" },
+      headers: {},
+    }));
+    const missSession = createOmdbRequestSession();
+    assertEq(
+      await fetchOmdbPoster("tt0000005", "key", cache, missSession),
+      "",
+      "permanent title miss returns no poster",
+    );
+    assertEq(
+      await fetchOmdbPoster("tt0000005", "key", cache, missSession),
+      "",
+      "permanent title miss is served from negative cache",
+    );
+    assertEq(stub.requestUrlMock.calls.length, 1,
+      "negative cache prevents repeat title-miss requests",
+    );
+    assertEq(cache["omdb:tt0000005"]?.poster_url, "",
+      "negative cache stores an empty poster URL");
+
+    stub.resetRequestUrlMock(() => ({
+      status: 200,
+      json: { Response: "False", Error: "Incorrect IMDb ID." },
+      headers: {},
+    }));
+    assertEq(
+      await fetchOmdbPoster("tt0000006", "key", cache, missSession),
+      "",
+      "incorrect IMDb ID is treated as a permanent miss",
+    );
+    assertTrue(!!cache["omdb:tt0000006"],
+      "incorrect IMDb ID is negative-cached");
   }
 
   console.log("\n[40e] poster source policy keeps localization independent");

@@ -119,16 +119,29 @@ export async function verifyOmdbApiKey(
 
 interface PosterFetchResult {
   posterUrl: string;
-  successful: boolean;
-  failureReason?: OmdbVerifyFailureReason;
+  cacheable: boolean;
+  failureReason?: OmdbVerifyFailureReason | "not_found";
 }
 
 export interface OmdbRequestSession {
-  quotaExhausted: boolean;
+  blockedReason?: "limit" | "unauthorized";
 }
 
 export function createOmdbRequestSession(): OmdbRequestSession {
-  return { quotaExhausted: false };
+  return {};
+}
+
+function classifyTitleLookupError(
+  error: string,
+): OmdbVerifyFailureReason | "not_found" {
+  const normalized = error.toLowerCase();
+  if (
+    normalized.includes("not found") ||
+    normalized.includes("incorrect imdb id")
+  ) {
+    return "not_found";
+  }
+  return classifyError(error);
 }
 
 async function fetchPosterUncached(
@@ -142,11 +155,19 @@ async function fetchPosterUncached(
       headers: { "Content-Type": "application/json" },
       throw: false,
     });
+    if (response.status === 401 || response.status === 403) {
+      console.warn(`OMDb poster lookup authentication failed for ${imdbId}`);
+      return {
+        posterUrl: "",
+        cacheable: false,
+        failureReason: "unauthorized",
+      };
+    }
     if (response.status === 429) {
       console.warn(`OMDb poster lookup quota exhausted for ${imdbId}`);
       return {
         posterUrl: "",
-        successful: false,
+        cacheable: false,
         failureReason: "limit",
       };
     }
@@ -154,7 +175,7 @@ async function fetchPosterUncached(
       console.warn(`OMDb poster lookup failed for ${imdbId}: ${response.status}`);
       return {
         posterUrl: "",
-        successful: false,
+        cacheable: false,
         failureReason: "network",
       };
     }
@@ -162,18 +183,21 @@ async function fetchPosterUncached(
     const data = response.json as OmdbTitleResponse;
     if (data.Response !== "True") {
       const detail = data.Error || "unknown error";
-      const failureReason = classifyError(detail);
+      const failureReason = classifyTitleLookupError(detail);
+      if (failureReason === "not_found") {
+        return { posterUrl: "", cacheable: true, failureReason };
+      }
       console.warn(
         `OMDb poster lookup failed for ${imdbId}: ${detail}`,
       );
-      return { posterUrl: "", successful: false, failureReason };
+      return { posterUrl: "", cacheable: false, failureReason };
     }
-    return { posterUrl: posterFromResponse(data), successful: true };
+    return { posterUrl: posterFromResponse(data), cacheable: true };
   } catch (error) {
     console.warn(`OMDb poster lookup error for ${imdbId}:`, error);
     return {
       posterUrl: "",
-      successful: false,
+      cacheable: false,
       failureReason: "network",
     };
   }
@@ -196,20 +220,24 @@ export async function fetchOmdbPoster(
   if (freshness === "fresh" && entry) return entry.poster_url;
 
   if (freshness === "stale" && entry) {
-    if (!session?.quotaExhausted && !inFlightRevalidations.has(cacheKey)) {
+    if (!session?.blockedReason && !inFlightRevalidations.has(cacheKey)) {
       inFlightRevalidations.add(cacheKey);
       void revalidatePoster(normalizedId, apiKey, cache, cacheKey, session);
     }
     return entry.poster_url;
   }
 
-  if (session?.quotaExhausted) return "";
+  if (session?.blockedReason) return "";
 
   const result = await fetchPosterUncached(normalizedId, apiKey);
-  if (result.failureReason === "limit" && session) {
-    session.quotaExhausted = true;
+  if (
+    session &&
+    (result.failureReason === "limit" ||
+      result.failureReason === "unauthorized")
+  ) {
+    session.blockedReason = result.failureReason;
   }
-  if (result.successful) {
+  if (result.cacheable) {
     cache[cacheKey] = {
       cache_version: OMDB_POSTER_CACHE_ENTRY_VERSION,
       poster_url: result.posterUrl,
@@ -229,10 +257,14 @@ async function revalidatePoster(
 ): Promise<void> {
   try {
     const result = await fetchPosterUncached(imdbId, apiKey);
-    if (result.failureReason === "limit" && session) {
-      session.quotaExhausted = true;
+    if (
+      session &&
+      (result.failureReason === "limit" ||
+        result.failureReason === "unauthorized")
+    ) {
+      session.blockedReason = result.failureReason;
     }
-    if (result.successful) {
+    if (result.cacheable) {
       cache[cacheKey] = {
         cache_version: OMDB_POSTER_CACHE_ENTRY_VERSION,
         poster_url: result.posterUrl,
