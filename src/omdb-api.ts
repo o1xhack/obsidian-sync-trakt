@@ -222,8 +222,14 @@ export async function fetchOmdbPoster(
   if (freshness === "stale" && entry) {
     if (!session?.blockedReason && !inFlightRevalidations.has(cacheKey)) {
       inFlightRevalidations.add(cacheKey);
-      void revalidatePoster(normalizedId, apiKey, cache, cacheKey, session);
+      // Await inside the caller's bounded concurrency lane. Returning from
+      // this function immediately would let the pool schedule every stale
+      // item at once, defeating both the request limit and the run-level
+      // circuit breaker.
+      await revalidatePoster(normalizedId, apiKey, cache, cacheKey, session);
     }
+    // The current sync deliberately keeps using the stale URL. The refreshed
+    // entry is available to later lookups without changing notes mid-run.
     return entry.poster_url;
   }
 

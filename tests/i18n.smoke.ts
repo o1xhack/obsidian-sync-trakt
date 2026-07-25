@@ -2563,6 +2563,62 @@ void (async () => {
     );
   }
 
+  console.log("\n[40f] stale OMDb revalidation stays inside bounded concurrency");
+  {
+    const stub = await import("./stub-obsidian");
+    const ids = Array.from(
+      { length: 12 },
+      (_, index) => `tt${String(index + 10).padStart(7, "0")}`,
+    );
+    const cache: OmdbPosterCache = {};
+    for (const id of ids) {
+      cache[`omdb:${id}`] = {
+        cache_version: 1,
+        poster_url: `stale-${id}`,
+        cached_at: 0,
+        expires_at: 0,
+      };
+    }
+
+    let active = 0;
+    let maxActive = 0;
+    stub.resetRequestUrlMock(async (req) => {
+      active++;
+      maxActive = Math.max(maxActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      active--;
+      const imdbId = new URL(req.url).searchParams.get("i") ?? "";
+      return {
+        status: 200,
+        json: {
+          Response: "True",
+          imdbID: imdbId,
+          Poster: `fresh-${imdbId}`,
+        },
+        headers: {},
+      };
+    });
+
+    const session = createOmdbRequestSession();
+    const returned = new Array<string>(ids.length);
+    await processWithConcurrency(ids, 5, async (id, index) => {
+      returned[index] = await fetchOmdbPoster(id, "key", cache, session);
+    });
+
+    assertTrue(maxActive <= 5,
+      "stale revalidation never exceeds the caller's five-request pool");
+    assertTrue(maxActive > 1,
+      "stale revalidation still uses available concurrency");
+    assertEq(stub.requestUrlMock.calls.length, ids.length,
+      "each stale cache entry is revalidated once");
+    assertTrue(
+      returned.every((poster, index) => poster === `stale-${ids[index]}`),
+      "current sync keeps using stale poster URLs",
+    );
+    assertEq(cache[`omdb:${ids[0]}`]?.poster_url, `fresh-${ids[0]}`,
+      "refreshed poster is cached for later lookups");
+  }
+
   // ── Test 41: spec 0004 legacy-folder migration notice ─────────────────
   // Verifies the i18n key the migration logic relies on is present in
   // both languages. The file-reading half of the migration is bound to
