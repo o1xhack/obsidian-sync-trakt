@@ -30,7 +30,7 @@ import {
   pickTraktTranslation,
 } from "./trakt-api";
 import { fetchMovieMetadata, fetchTvMetadata } from "./tmdb-api";
-import { fetchOmdbPoster } from "./omdb-api";
+import { createOmdbRequestSession, fetchOmdbPoster } from "./omdb-api";
 import { ensureValidToken } from "./trakt-auth";
 import {
   renderNote,
@@ -71,11 +71,12 @@ export function shouldFetchTmdbMetadata(
   hasTmdbKey: boolean,
   hasTmdbId: boolean,
   metadataLanguage: string,
+  fetchPosters = true,
 ): boolean {
   return (
     hasTmdbKey &&
     hasTmdbId &&
-    (!!metadataLanguage || posterSource !== "omdb")
+    (!!metadataLanguage || (fetchPosters && posterSource !== "omdb"))
   );
 }
 
@@ -1064,7 +1065,7 @@ export class SyncEngine {
 
       applyHistoryStateToItems(this.settings.historyState, merged.values());
       const items = [...merged.values()];
-      await this.enrichMetadata(items, onProgress);
+      await this.enrichMetadata(items, onProgress, { fetchPosters: false });
       await this.saveSettings();
 
       return { status: "updated", items };
@@ -1381,13 +1382,16 @@ export class SyncEngine {
   private async enrichMetadata(
     itemList: NormalizedItem[],
     onProgress?: SyncProgress,
+    options: { fetchPosters?: boolean } = {},
   ): Promise<void> {
     const t = getTranslator(this.settings.uiLanguage);
     const language = getEffectiveMetadataLanguage(this.settings);
     const fallbackLanguage = getEffectiveMetadataFallbackLanguage(this.settings);
+    const fetchPosters = options.fetchPosters ?? true;
     const hasTmdbKey = !!this.settings.tmdbApiKey.trim();
-    const hasOmdbKey = !!this.settings.omdbApiKey.trim();
-    if (hasTmdbKey || hasOmdbKey || language) {
+    const hasOmdbKey = fetchPosters && !!this.settings.omdbApiKey.trim();
+    const omdbSession = createOmdbRequestSession();
+    if (language || (fetchPosters && (hasTmdbKey || hasOmdbKey))) {
       await processWithConcurrency(
         itemList,
         TMDB_CONCURRENCY,
@@ -1398,6 +1402,7 @@ export class SyncEngine {
             hasTmdbKey,
             !!tmdbId,
             language,
+            fetchPosters,
           );
           let tmdbPoster = "";
 
@@ -1425,6 +1430,8 @@ export class SyncEngine {
             );
           }
 
+          if (!fetchPosters) return;
+
           if (this.settings.posterSource === "tmdb") {
             item.poster_url = tmdbPoster;
             return;
@@ -1446,6 +1453,7 @@ export class SyncEngine {
                   item.ids.imdb,
                   this.settings.omdbApiKey,
                   this.settings.omdbPosterCache,
+                  omdbSession,
                 )
               : "";
         },

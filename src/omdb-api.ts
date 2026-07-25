@@ -120,6 +120,15 @@ export async function verifyOmdbApiKey(
 interface PosterFetchResult {
   posterUrl: string;
   successful: boolean;
+  failureReason?: OmdbVerifyFailureReason;
+}
+
+export interface OmdbRequestSession {
+  quotaExhausted: boolean;
+}
+
+export function createOmdbRequestSession(): OmdbRequestSession {
+  return { quotaExhausted: false };
 }
 
 async function fetchPosterUncached(
@@ -133,22 +142,40 @@ async function fetchPosterUncached(
       headers: { "Content-Type": "application/json" },
       throw: false,
     });
+    if (response.status === 429) {
+      console.warn(`OMDb poster lookup quota exhausted for ${imdbId}`);
+      return {
+        posterUrl: "",
+        successful: false,
+        failureReason: "limit",
+      };
+    }
     if (response.status !== 200) {
       console.warn(`OMDb poster lookup failed for ${imdbId}: ${response.status}`);
-      return { posterUrl: "", successful: false };
+      return {
+        posterUrl: "",
+        successful: false,
+        failureReason: "network",
+      };
     }
 
     const data = response.json as OmdbTitleResponse;
     if (data.Response !== "True") {
+      const detail = data.Error || "unknown error";
+      const failureReason = classifyError(detail);
       console.warn(
-        `OMDb poster lookup failed for ${imdbId}: ${data.Error || "unknown error"}`,
+        `OMDb poster lookup failed for ${imdbId}: ${detail}`,
       );
-      return { posterUrl: "", successful: false };
+      return { posterUrl: "", successful: false, failureReason };
     }
     return { posterUrl: posterFromResponse(data), successful: true };
   } catch (error) {
     console.warn(`OMDb poster lookup error for ${imdbId}:`, error);
-    return { posterUrl: "", successful: false };
+    return {
+      posterUrl: "",
+      successful: false,
+      failureReason: "network",
+    };
   }
 }
 
@@ -158,6 +185,7 @@ export async function fetchOmdbPoster(
   imdbId: string,
   apiKey: string,
   cache: OmdbPosterCache,
+  session?: OmdbRequestSession,
 ): Promise<string> {
   const normalizedId = normalizeImdbId(imdbId);
   if (!apiKey.trim() || !isUsableImdbId(normalizedId)) return "";
@@ -168,14 +196,19 @@ export async function fetchOmdbPoster(
   if (freshness === "fresh" && entry) return entry.poster_url;
 
   if (freshness === "stale" && entry) {
-    if (!inFlightRevalidations.has(cacheKey)) {
+    if (!session?.quotaExhausted && !inFlightRevalidations.has(cacheKey)) {
       inFlightRevalidations.add(cacheKey);
-      void revalidatePoster(normalizedId, apiKey, cache, cacheKey);
+      void revalidatePoster(normalizedId, apiKey, cache, cacheKey, session);
     }
     return entry.poster_url;
   }
 
+  if (session?.quotaExhausted) return "";
+
   const result = await fetchPosterUncached(normalizedId, apiKey);
+  if (result.failureReason === "limit" && session) {
+    session.quotaExhausted = true;
+  }
   if (result.successful) {
     cache[cacheKey] = {
       cache_version: OMDB_POSTER_CACHE_ENTRY_VERSION,
@@ -192,9 +225,13 @@ async function revalidatePoster(
   apiKey: string,
   cache: OmdbPosterCache,
   cacheKey: string,
+  session?: OmdbRequestSession,
 ): Promise<void> {
   try {
     const result = await fetchPosterUncached(imdbId, apiKey);
+    if (result.failureReason === "limit" && session) {
+      session.quotaExhausted = true;
+    }
     if (result.successful) {
       cache[cacheKey] = {
         cache_version: OMDB_POSTER_CACHE_ENTRY_VERSION,

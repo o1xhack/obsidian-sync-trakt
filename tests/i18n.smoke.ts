@@ -42,6 +42,7 @@ import {
 } from "../src/tmdb-api";
 import {
   clearOmdbPosterCache,
+  createOmdbRequestSession,
   fetchOmdbPoster,
   omdbPosterCacheEntryFreshness,
   omdbPosterCacheKey,
@@ -2417,6 +2418,45 @@ void (async () => {
       "clearOmdbPosterCache removes all entries");
   }
 
+  console.log("\n[40d-2] OMDb quota circuit breaker is scoped to one sync");
+  {
+    const stub = await import("./stub-obsidian");
+    const cache: OmdbPosterCache = {};
+    const session = createOmdbRequestSession();
+    stub.resetRequestUrlMock(() => ({
+      status: 200,
+      json: { Response: "False", Error: "Request limit reached!" },
+      headers: {},
+    }));
+
+    assertEq(await fetchOmdbPoster("tt0000001", "key", cache, session), "",
+      "quota response returns no poster");
+    assertTrue(session.quotaExhausted,
+      "quota response trips the current sync's circuit breaker");
+    assertEq(await fetchOmdbPoster("tt0000002", "key", cache, session), "",
+      "later lookup in the same sync short-circuits");
+    assertEq(stub.requestUrlMock.calls.length, 1,
+      "quota circuit breaker prevents more doomed requests");
+
+    const nextSync = createOmdbRequestSession();
+    stub.resetRequestUrlMock(() => ({
+      status: 200,
+      json: {
+        Response: "True",
+        imdbID: "tt0000002",
+        Poster: "https://example.test/retry.jpg",
+      },
+      headers: {},
+    }));
+    assertEq(
+      await fetchOmdbPoster("tt0000002", "key", cache, nextSync),
+      "https://example.test/retry.jpg",
+      "a later sync retries previously blocked entries",
+    );
+    assertEq(stub.requestUrlMock.calls.length, 1,
+      "the circuit breaker does not persist across syncs");
+  }
+
   console.log("\n[40e] poster source policy keeps localization independent");
   {
     assertTrue(
@@ -2426,6 +2466,14 @@ void (async () => {
     assertTrue(
       !shouldFetchTmdbMetadata("omdb", true, true, ""),
       "OMDb-only posters skip unnecessary TMDB calls without localization",
+    );
+    assertTrue(
+      !shouldFetchTmdbMetadata("auto", true, true, "", false),
+      "Daily-only enrichment skips TMDB poster-only calls",
+    );
+    assertTrue(
+      shouldFetchTmdbMetadata("auto", true, true, "zh-CN", false),
+      "Daily-only enrichment still fetches TMDB localization",
     );
     assertTrue(
       shouldFetchTmdbMetadata("auto", true, true, ""),
@@ -5044,6 +5092,8 @@ void (async () => {
       syncWatchedDetail: false,
       syncFavorites: false,
       syncRatings: false,
+      omdbApiKey: "omdb-key",
+      posterSource: "omdb",
     });
     const engine = new SyncEngine(
       new stub.App() as never,
@@ -5059,6 +5109,12 @@ void (async () => {
     );
     assertEq(result.status, "updated", "Daily-only data sync completes");
     assertEq(result.items.length, 1, "watchlist item is included in Daily snapshot");
+    assertTrue(
+      !stub.requestUrlMock.calls.some((call) =>
+        call.url.includes("omdbapi.com"),
+      ),
+      "Daily-only sync never spends OMDb poster quota",
+    );
     assertEq(
       result.items[0].watchlist_added_at,
       "2026-05-11T10:00:00.000Z",
