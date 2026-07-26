@@ -253,6 +253,14 @@ export interface TmdbCacheEntry {
    */
   cache_version?: number;
   poster_url: string;
+  /**
+   * False when the entry was fetched for translation only and the localized
+   * response had no poster. A later TMDB-poster request can then upgrade the
+   * entry instead of treating the missing poster as final until TTL expiry.
+   * Older entries omit this because their fetch path always attempted the
+   * default-poster fallback.
+   */
+  poster_fallback_attempted?: boolean;
   translation: TmdbTranslationData | null;
   cached_at: number;
   expires_at: number;

@@ -38,6 +38,7 @@ export type TmdbTranslation = TmdbTranslationData;
 export interface TmdbMetadata {
   poster_url: string;
   translation: TmdbTranslation | null;
+  poster_fallback_attempted?: boolean;
 }
 
 export interface TmdbTranslationEntry {
@@ -205,6 +206,7 @@ export async function fetchMovieMetadata(
   cache: TmdbCache,
   ttlDays: number,
   fallbackLanguage: string = "",
+  includeDefaultPosterFallback = true,
 ): Promise<TmdbMetadata> {
   return fetchTmdbMetadataCached(
     "movie",
@@ -215,6 +217,7 @@ export async function fetchMovieMetadata(
     cache,
     ttlDays,
     fallbackLanguage,
+    includeDefaultPosterFallback,
   );
 }
 
@@ -226,6 +229,7 @@ export async function fetchTvMetadata(
   cache: TmdbCache,
   ttlDays: number,
   fallbackLanguage: string = "",
+  includeDefaultPosterFallback = true,
 ): Promise<TmdbMetadata> {
   return fetchTmdbMetadataCached(
     "tv",
@@ -236,6 +240,7 @@ export async function fetchTvMetadata(
     cache,
     ttlDays,
     fallbackLanguage,
+    includeDefaultPosterFallback,
   );
 }
 
@@ -248,18 +253,29 @@ async function fetchTmdbMetadataCached(
   cache: TmdbCache,
   ttlDays: number,
   fallbackLanguage: string = "",
+  includeDefaultPosterFallback = true,
 ): Promise<TmdbMetadata> {
   const key = tmdbCacheKey(mediaType, tmdbId, language, fallbackLanguage);
   const entry = cache[key];
   const freshness = cacheEntryFreshness(entry);
+  const needsPosterFallbackUpgrade =
+    includeDefaultPosterFallback &&
+    !!language &&
+    !!entry &&
+    !entry.poster_url &&
+    entry.poster_fallback_attempted === false;
 
-  if (freshness === "fresh" && entry) {
+  if (freshness === "fresh" && entry && !needsPosterFallbackUpgrade) {
     // Hot path: every steady-state sync hits this for items we've already
     // seen. Zero API calls, zero await of network.
-    return { poster_url: entry.poster_url, translation: entry.translation };
+    return {
+      poster_url: entry.poster_url,
+      translation: entry.translation,
+      poster_fallback_attempted: entry.poster_fallback_attempted ?? true,
+    };
   }
 
-  if (freshness === "stale" && entry) {
+  if (freshness === "stale" && entry && !needsPosterFallbackUpgrade) {
     // Stale-while-revalidate: serve the cached value now, fire a
     // background fetch that updates the cache on success. If the
     // background fetch fails, the stale entry stays — user sees old data
@@ -276,9 +292,14 @@ async function fetchTmdbMetadataCached(
         ttlDays,
         key,
         fallbackLanguage,
+        includeDefaultPosterFallback,
       );
     }
-    return { poster_url: entry.poster_url, translation: entry.translation };
+    return {
+      poster_url: entry.poster_url,
+      translation: entry.translation,
+      poster_fallback_attempted: entry.poster_fallback_attempted ?? true,
+    };
   }
 
   // Miss → fetch synchronously, write to cache.
@@ -289,6 +310,7 @@ async function fetchTmdbMetadataCached(
     size,
     language,
     fallbackLanguage,
+    includeDefaultPosterFallback,
   );
   // Only cache successful fetches. A response that's both empty AND has no
   // poster suggests TMDB returned an error or we got rate-limited; we'd
@@ -297,6 +319,7 @@ async function fetchTmdbMetadataCached(
     cache[key] = {
       cache_version: TMDB_CACHE_ENTRY_VERSION,
       poster_url: fresh.poster_url,
+      poster_fallback_attempted: fresh.poster_fallback_attempted,
       translation: fresh.translation,
       cached_at: Date.now(),
       expires_at: computeCacheExpiry(ttlDays),
@@ -315,6 +338,7 @@ async function revalidateInBackground(
   ttlDays: number,
   key: string,
   fallbackLanguage: string = "",
+  includeDefaultPosterFallback = true,
 ): Promise<void> {
   try {
     const fresh = await fetchTmdbMetadata(
@@ -324,11 +348,13 @@ async function revalidateInBackground(
       size,
       language,
       fallbackLanguage,
+      includeDefaultPosterFallback,
     );
     if (fresh.poster_url || fresh.translation || !language) {
       cache[key] = {
         cache_version: TMDB_CACHE_ENTRY_VERSION,
         poster_url: fresh.poster_url,
+        poster_fallback_attempted: fresh.poster_fallback_attempted,
         translation: fresh.translation,
         cached_at: Date.now(),
         expires_at: computeCacheExpiry(ttlDays),
@@ -382,6 +408,7 @@ async function fetchTmdbMetadata(
   size: PosterSize,
   language: string,
   fallbackLanguage: string = "",
+  includeDefaultPosterFallback = true,
 ): Promise<TmdbMetadata> {
   try {
     const params = new URLSearchParams({ api_key: apiKey });
@@ -409,7 +436,9 @@ async function fetchTmdbMetadata(
     // Poster fallback: if a language-specific request returned null, retry
     // without `language` to get the default poster. One extra call only
     // for items where the localized request didn't have a poster.
-    if (language && !posterPath) {
+    const posterFallbackAttempted =
+      !language || !!posterPath || includeDefaultPosterFallback;
+    if (language && !posterPath && includeDefaultPosterFallback) {
       try {
         const fbParams = new URLSearchParams({ api_key: apiKey });
         const fbResp = await requestUrl({
@@ -435,7 +464,11 @@ async function fetchTmdbMetadata(
       : "";
 
     if (!language) {
-      return { poster_url, translation: null };
+      return {
+        poster_url,
+        translation: null,
+        poster_fallback_attempted: posterFallbackAttempted,
+      };
     }
 
     const translation = pickBestTranslation(
@@ -444,7 +477,11 @@ async function fetchTmdbMetadata(
       mediaType,
       fallbackLanguage,
     );
-    return { poster_url, translation };
+    return {
+      poster_url,
+      translation,
+      poster_fallback_attempted: posterFallbackAttempted,
+    };
   } catch (e) {
     console.warn(`TMDB lookup error for ${mediaType}/${tmdbId}:`, e);
     return { poster_url: "", translation: null };

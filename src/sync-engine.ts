@@ -1409,6 +1409,8 @@ export class SyncEngine {
           if (needsTmdb && tmdbId) {
             const fetcher =
               item.type === "movie" ? fetchMovieMetadata : fetchTvMetadata;
+            const needsTmdbPoster =
+              fetchPosters && this.settings.posterSource !== "omdb";
             const meta = await fetcher(
               tmdbId,
               this.settings.tmdbApiKey,
@@ -1417,6 +1419,7 @@ export class SyncEngine {
               this.settings.tmdbCache,
               this.settings.tmdbCacheTtlDays,
               fallbackLanguage,
+              needsTmdbPoster,
             );
             tmdbPoster = meta.poster_url;
             if (meta.translation) {

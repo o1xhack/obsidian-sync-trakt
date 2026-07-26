@@ -1596,6 +1596,82 @@ void (async () => {
     assertEq(result.translation?.title, "缓存标题", "returns cached title");
   }
 
+  console.log("\n[25b] translation-only TMDB fetch skips unused poster fallback");
+  {
+    const stub = await import("./stub-obsidian");
+    const cache: TmdbCache = {};
+    const localizedResponse = {
+      poster_path: null,
+      original_title: "Example",
+      original_language: "en",
+      title: "Example",
+      overview: "",
+      tagline: "",
+      genres: [],
+      translations: {
+        translations: [{
+          iso_639_1: "zh",
+          iso_3166_1: "CN",
+          data: { title: "示例", overview: "简介", tagline: "" },
+        }],
+      },
+    };
+    stub.resetRequestUrlMock(({ url }) => ({
+      status: 200,
+      json: url.includes("language=")
+        ? localizedResponse
+        : { ...localizedResponse, poster_path: "/default.jpg" },
+      headers: {},
+    }));
+
+    const translationOnly = await fetchMovieMetadata(
+      1000,
+      "test-key",
+      "w500",
+      "zh-CN",
+      cache,
+      90,
+      "",
+      false,
+    );
+    assertEq(stub.requestUrlMock.calls.length, 1,
+      "OMDb-only localization makes one TMDB request");
+    assertEq(translationOnly.translation?.title, "示例",
+      "translation-only request still returns localized metadata");
+    assertEq(translationOnly.poster_url, "",
+      "translation-only request does not fetch a default TMDB poster");
+    const key = tmdbCacheKey("movie", 1000, "zh-CN");
+    assertEq(cache[key]?.poster_fallback_attempted, false,
+      "cache records that default-poster fallback was skipped");
+
+    stub.resetRequestUrlMock(({ url }) => ({
+      status: 200,
+      json: url.includes("language=")
+        ? localizedResponse
+        : { ...localizedResponse, poster_path: "/default.jpg" },
+      headers: {},
+    }));
+    const posterUpgrade = await fetchMovieMetadata(
+      1000,
+      "test-key",
+      "w500",
+      "zh-CN",
+      cache,
+      90,
+      "",
+      true,
+    );
+    assertEq(stub.requestUrlMock.calls.length, 2,
+      "switching to a TMDB poster source upgrades the incomplete cache");
+    assertEq(
+      posterUpgrade.poster_url,
+      "https://image.tmdb.org/t/p/w500/default.jpg",
+      "cache upgrade fetches the default TMDB poster",
+    );
+    assertEq(cache[key]?.poster_fallback_attempted, true,
+      "upgraded cache records completed poster fallback");
+  }
+
   // ── Test 26-30: spec 0002 diff-based write ────────────────────────────
   // Critical safety property: when frontmatter has any meaningful change,
   // diff MUST return true. False negatives = silent data loss.
