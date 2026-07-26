@@ -120,24 +120,24 @@ Filtrer par `trakt_type = "movie"` / `"show"`, trier par `trakt_year` / `trakt_r
 ## 🚀 Démarrage rapide
 
 1. Paramètres → Community plugins → **Parcourir** → recherchez **Sync Trakt** → **Installer** → **Activer**
-2. Paramètres → **Sync Trakt** → entrez vos clés API Trakt + TMDB ([guide SETUP](../SETUP.md))
+2. Paramètres → **Sync Trakt** → connectez Trakt et ajoutez éventuellement des clés TMDB/OMDb ([guide SETUP](../SETUP.md))
 3. Palette de commandes → **Sync Trakt: Sync**
 
 ## 🔑 Clés API : ce que chacune déverrouille
 
-Le plugin utilise deux API. **Trakt est obligatoire** — sans elle, le plugin ne peut rien synchroniser. **TMDB est optionnelle** mais déverrouille la majorité de ce qui rend le plugin intéressant. Détails :
+Le plugin se connecte à trois services. **Trakt est obligatoire** — sans lui, le plugin ne peut rien synchroniser. **TMDB est optionnel** et fournit les métadonnées localisées ainsi que les affiches TMDB. **OMDb est également optionnel** et sert uniquement à rechercher des affiches via l'identifiant IMDb.
 
-| Fonctionnalité | API Trakt<br/>_(requise)_ | API TMDB<br/>_(recommandée)_ |
-|---|:---:|:---:|
-| Synchroniser votre bibliothèque Trakt (watchlist, watched, favorites, ratings) | ✅ | — |
-| Horodatages de visionnage par épisode | ✅ | — |
-| Titre / synopsis / accroche dans votre langue | ✅ basique | ✅ qualité supérieure |
-| **Genres dans votre langue** | ❌ | ✅ |
-| **Images d'affiches intégrées aux notes** | ❌ | ✅ |
+| Fonctionnalité | API Trakt<br/>_(requise)_ | API TMDB<br/>_(optionnelle)_ | API OMDb<br/>_(optionnelle)_ |
+|---|:---:|:---:|:---:|
+| Synchroniser votre bibliothèque Trakt (watchlist, watched, favorites, ratings) | ✅ | — | — |
+| Horodatages de visionnage par épisode | ✅ | — | — |
+| Titre / synopsis / accroche dans votre langue | ✅ basique | ✅ qualité supérieure | — |
+| **Genres dans votre langue** | ❌ | ✅ | — |
+| **Images d'affiches intégrées aux notes** | ❌ | ✅ | ✅ |
 
-Si vous vous contentez du contenu en anglais et ne voulez pas d'affiches, laissez TMDB vide — Trakt seul suffit. Pour une localisation complète non-anglaise (incluant genres et affiches), **ajoutez une clé TMDB** ([inscription gratuite](https://www.themoviedb.org/settings/api)). Après avoir collé votre clé, cliquez sur le bouton **Test** à côté du champ pour vérifier qu'elle fonctionne avant votre première synchronisation.
+Si le contenu en anglais sans affiches vous suffit, Trakt seul convient. Utilisez TMDB pour les genres localisés et les affiches TMDB, ou OMDb comme solution de repli ou comme source d'affiches sans TMDB. La clé OMDb gratuite est limitée à 1 000 requêtes par jour ; la synchronisation Daily Notes uniquement ne consomme pas ce quota. Testez chaque clé avec son bouton **Test**.
 
-→ [Procédure complète pour les deux clés](../SETUP.md)
+→ [Procédure complète pour toutes les clés](../SETUP.md)
 
 ## 📦 Installation
 
@@ -181,7 +181,7 @@ Puis copiez `main.js`, `manifest.json`, `styles.css` dans `<vault>/.obsidian/plu
 
 | Document | Contenu |
 |---|---|
-| [SETUP](../SETUP.md) | Création des clés API Trakt + TMDB, configuration initiale, dépannage (anglais) |
+| [SETUP](../SETUP.md) | Trakt et clés TMDB/OMDb optionnelles, configuration initiale, dépannage (anglais) |
 | [MANUAL](../MANUAL.md) | Référence complète des paramètres, champs frontmatter, variables de modèle (anglais) |
 | [DEVELOPER](../DEVELOPER.md) | Architecture, flux de données, comment étendre (anglais uniquement) |
 | [docs/i18n/](.) | Traductions du README en 8 langues supplémentaires |

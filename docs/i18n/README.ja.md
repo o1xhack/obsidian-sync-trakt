@@ -120,24 +120,32 @@ TMDB メタデータや詳細な視聴履歴の集約など、大きくても再
 ## 🚀 クイックスタート
 
 1. 設定 → コミュニティプラグイン → **ブラウズ** → **Sync Trakt** を検索 → **インストール** → **有効化**
-2. 設定 → **Sync Trakt** → Trakt + TMDB API キーを入力（[セットアップガイド](SETUP.ja.md)）
+2. 設定 → **Sync Trakt** → Trakt を接続し、必要に応じて TMDB / OMDb API キーを入力（[セットアップガイド](SETUP.ja.md)）
 3. コマンドパレット → **Sync Trakt: Sync**
 
 ## 🔑 API キーで何ができるか
 
-プラグインは 2 つの API を使います。**Trakt は必須** — これがないと何も同期できません。**TMDB は任意** ですが、ほとんどのユーザーがこのプラグインを使う本来の目的（多言語メタデータ・ポスター）はこちらで解放されます。詳細：
+プラグインは 3 つのサービスに接続します。**Trakt は必須**です。**TMDB
+は任意**で、より完全なローカライズと優先ポスターを提供します。**OMDb
+も任意**で、IMDb ID によるポスター検索だけに使用します。
 
-| 機能 | Trakt API<br/>_（必須）_ | TMDB API<br/>_（推奨）_ |
-|---|:---:|:---:|
-| Trakt ライブラリの同期（watchlist、watched、favorites、ratings） | ✅ | — |
-| エピソード単位の視聴タイムスタンプ | ✅ | — |
-| title / overview / tagline をあなたの言語に翻訳 | ✅ 基本 | ✅ より高品質 |
-| **genres をあなたの言語に翻訳** | ❌ | ✅ |
-| **ノートに埋め込まれるポスター画像** | ❌ | ✅ |
+| 機能 | Trakt API<br/>_（必須）_ | TMDB API<br/>_（推奨）_ | OMDb API<br/>_（任意）_ |
+|---|:---:|:---:|:---:|
+| Trakt ライブラリの同期（watchlist、watched、favorites、ratings） | ✅ | — | — |
+| エピソード単位の視聴タイムスタンプ | ✅ | — | — |
+| title / overview / tagline をあなたの言語に翻訳 | ✅ 基本 | ✅ より高品質 | — |
+| **genres をあなたの言語に翻訳** | ❌ | ✅ | — |
+| **ノートに埋め込まれるポスター画像** | ❌ | ✅ | ✅ |
 
-英語のままで構わず、ポスターも不要なら TMDB は空欄で構いません — Trakt だけで十分です。非英語の完全なローカライズ（genres とポスターを含む）が欲しい場合は **TMDB キーを入力してください**（[無料登録](https://www.themoviedb.org/settings/api)）。キーを貼り付けたら、入力欄の横にある **Test** ボタンで動作確認してから初回同期を実行してください。
+英語だけでポスターが不要なら Trakt だけで十分です。ローカライズ済み
+genres と TMDB ポスターには
+[TMDB キー](https://www.themoviedb.org/settings/api)を、ポスターの
+フォールバックまたは TMDB なしのポスター取得には
+[OMDb キー](https://www.omdbapi.com/apikey.aspx)を追加してください。
+OMDb の無料キーは 1 日 1,000 リクエストまでで、Daily Notes-only 同期は
+この上限を消費しません。
 
-→ [両方のキーの完全な設定手順](SETUP.ja.md)
+→ [すべてのキーの完全な設定手順](SETUP.ja.md)
 
 ## 📦 インストール
 
@@ -181,7 +189,7 @@ npm run test:i18n  # スモークテスト
 
 | ドキュメント | 内容 |
 |---|---|
-| [SETUP](SETUP.ja.md) | Trakt + TMDB API キーの作成、初回設定、トラブルシューティング |
+| [SETUP](SETUP.ja.md) | Trakt と任意の TMDB / OMDb API キー、初回設定、トラブルシューティング |
 | [MANUAL](MANUAL.ja.md) | 設定の完全リファレンス、フロントマター項目、テンプレート変数、同期動作 |
 | [DEVELOPER](../DEVELOPER.md) | アーキテクチャ概要、データフロー、拡張方法（英語のみ） |
 | [docs/i18n/](.) | README / SETUP / MANUAL の 8 言語翻訳 |

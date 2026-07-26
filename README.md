@@ -100,7 +100,7 @@ Each event type is gated by its corresponding sync source toggle — if `Sync fa
 **Manual backfill** uses a date-range picker with quick presets (Last 7 days / Last 30 days / This month / Last month). Live count shows how many Daily Notes actually exist in the picked range before you confirm. Configure folder + filename format (Moment.js syntax like `YYYY-MM-DD` or `YYYY/YYYY.MM.DD`) in **Settings → Daily Notes**. See [spec 0006](docs/specs/0006-daily-notes-integration.md).
 
 **Daily Notes-only auto-sync** can be enabled separately from full media
-auto-sync. It refreshes the Trakt/TMDB/OMDb data needed for Daily Notes and
+auto-sync. It refreshes the Trakt/TMDB data needed for Daily Notes and
 updates existing Daily Note files, but it does not create, rename,
 delete, or rewrite media notes. The Daily-only timer and the full sync
 timer share one lock, so if they fire together, one run skips instead of
@@ -140,24 +140,32 @@ Filter by `trakt_type = "movie"` / `"show"`, sort by `trakt_year` / `trakt_ratin
 ## 🚀 Quick start
 
 1. Settings → Community plugins → **Browse** → search for **Sync Trakt** → **Install** → **Enable**
-2. Settings → **Sync Trakt** → fill your Trakt + TMDB API keys ([SETUP guide](docs/SETUP.md))
+2. Settings → **Sync Trakt** → connect Trakt, then add optional TMDB / OMDb API keys as needed ([SETUP guide](docs/SETUP.md))
 3. Command palette → **Sync Trakt: Sync**
 
 ## 🔑 API keys: what each one unlocks
 
-The plugin uses two APIs. **Trakt is mandatory** — without it, the plugin can't sync anything. **TMDB is optional** but unlocks most of what makes the plugin worth installing. Here's the breakdown:
+The plugin connects to three services. **Trakt is mandatory** — without it,
+the plugin can't sync anything. **TMDB is optional** and provides richer
+localization plus the primary poster source. **OMDb is also optional** and is
+used only for poster lookup by IMDb ID.
 
-| Feature | Trakt API<br/>_(required)_ | TMDB API<br/>_(recommended)_ |
-|---|:---:|:---:|
-| Sync your Trakt library (watchlist, watched, favorites, ratings) | ✅ | — |
-| Per-episode watch timestamps | ✅ | — |
-| Title / overview / tagline in your language | ✅ basic | ✅ higher quality |
-| **Genres in your language** | ❌ | ✅ |
-| **Poster images embedded in notes** | ❌ | ✅ |
+| Feature | Trakt API<br/>_(required)_ | TMDB API<br/>_(recommended)_ | OMDb API<br/>_(optional)_ |
+|---|:---:|:---:|:---:|
+| Sync your Trakt library (watchlist, watched, favorites, ratings) | ✅ | — | — |
+| Per-episode watch timestamps | ✅ | — | — |
+| Title / overview / tagline in your language | ✅ basic | ✅ higher quality | — |
+| **Genres in your language** | ❌ | ✅ | — |
+| **Poster images embedded in notes** | ❌ | ✅ | ✅ |
 
-If you only want English content and no posters, you can leave TMDB blank — Trakt alone is enough. If you want any non-English localization beyond title/overview/tagline, **add a TMDB key** ([free signup](https://www.themoviedb.org/settings/api)). After pasting your key, click the **Test** button next to the field to confirm it works before your first sync.
+If you only want English content and no posters, Trakt alone is enough. Add a
+[TMDB key](https://www.themoviedb.org/settings/api) for localized genres and
+TMDB posters. Add an [OMDb key](https://www.omdbapi.com/apikey.aspx) when you
+want poster-only fallback or posters without TMDB. The OMDb free key is limited
+to 1,000 requests per day, and Daily Notes-only sync deliberately never spends
+that quota.
 
-→ [Full walkthrough for both keys](docs/SETUP.md)
+→ [Full walkthrough for all keys](docs/SETUP.md)
 
 ## 📦 Install
 
@@ -201,7 +209,7 @@ Then copy `main.js`, `manifest.json`, `styles.css` to `<vault>/.obsidian/plugins
 
 | Doc | Purpose |
 |---|---|
-| [SETUP](docs/SETUP.md) | Trakt + TMDB API key creation, first-time configuration, troubleshooting |
+| [SETUP](docs/SETUP.md) | Trakt + optional TMDB / OMDb API key creation, first-time configuration, troubleshooting |
 | [MANUAL](docs/MANUAL.md) | Full settings reference, frontmatter fields, template variables, sync behavior |
 | [DEVELOPER](docs/DEVELOPER.md) | Architecture overview, data flow, how to extend (English only) |
 | [docs/i18n/](docs/i18n/) | Translations of README / SETUP / MANUAL into 8 additional languages |

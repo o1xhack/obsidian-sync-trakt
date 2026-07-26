@@ -113,5 +113,6 @@ TMDB キーなしでポスターを取得したい場合、または TMDB に画
 |---|---|
 | Trakt client ID + secret | [Trakt API Applications](https://app.trakt.tv/settings/apps/api) → アプリをクリック |
 | TMDB API key (v3 auth) | <https://www.themoviedb.org/settings/api> |
+| OMDb API key | OMDb の有効化メール。再申請は <https://www.omdbapi.com/apikey.aspx> |
 
 Trakt のアクセストークンは自動更新されるので、何もする必要はありません。TMDB API キーは期限切れになりません。

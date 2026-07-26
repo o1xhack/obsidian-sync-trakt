@@ -24,7 +24,7 @@
 手动安装：
 
 1. 从 [最新 release](https://github.com/o1xhack/obsidian-sync-trakt/releases/latest) 下载 `main.js`、`manifest.json`、`styles.css`
-2. 在你的 vault 里创建文件夹 `.obsidian/plugins/obsidian-sync-trakt/`
+2. 在你的 vault 里创建文件夹 `.obsidian/plugins/sync-trakt/`
 3. 把三个文件复制进去
 4. 打开 Obsidian → 设置 → 第三方插件 → 启用 **Sync Trakt**
 
@@ -41,15 +41,17 @@
 3. **Redirect URIs** 填 `urn:ietf:wg:oauth:2.0:oob`
 4. 点 **Create**。复制 **Client ID** 和 **Client Secret**
 
-### 3b.（可选）申请 TMDB API key
+### 3b.（可选）配置元数据与海报服务
 
-海报图片从 [The Movie Database](https://themoviedb.org) 拉取。免费 API key 即可。不申请的话笔记不带海报。
+TMDB 提供本地化元数据和首选海报来源。未配置 TMDB 时，本地化会回退到
+Trakt；可选的 OMDb key 仍可按 IMDb ID 提供海报。
 
 1. 在 themoviedb.org 注册账号
 2. **Settings → API → Create → Developer**
 3. 复制 **API Key (v3 auth)**
 
-完整的申请流程见 [SETUP.zh-CN.md](SETUP.zh-CN.md)。
+TMDB 的完整申请流程和 OMDb 免费 key 激活步骤见
+[SETUP.zh-CN.md](SETUP.zh-CN.md)。
 
 ---
 
@@ -190,7 +192,8 @@ Tag notes 是你笔记之间相互链接的主题文件，构建关系图谱。*
 
 ### Reset
 
-**Reset to defaults** 把所有设置恢复为默认值。认证凭据和 TMDB API key 会保留。
+**Reset to defaults** 把所有设置恢复为默认值。认证凭据以及 TMDB / OMDb
+API key 会保留。
 
 ---
 
@@ -236,7 +239,7 @@ Tag notes 是你笔记之间相互链接的主题文件，构建关系图谱。*
 | `trakt_rated_at` | string | 评分的 ISO 时间戳。 |
 | `trakt_url` | string | Trakt 页面 URL。 |
 | `trakt_imdb_url` | string | IMDB 页面 URL。 |
-| `trakt_poster_url` | string | TMDB 海报图片 URL。 |
+| `trakt_poster_url` | string | 由所选服务返回的海报图片 URL。 |
 | `trakt_synced_at` | string | 同步最近一次**真正修改这条笔记**的 ISO 时间戳。0.3.0 起只在笔记内容实际有变化时才更新 —— 不是每次 sync 都刷新。可作为 Bases / Dataview "最近变更" 视图的排序键。 |
 | `trakt_community_stats_synced_at` | string | Smart 模式最近一次真正写入 `trakt_rating` / `trakt_votes` 的 ISO 时间戳。已有笔记可能要等到社区统计下一次被允许更新时才出现。 |
 | `trakt_tag_notes` | list | tag note 文件的 wikilink（"Add tag notes to frontmatter" 开启时）。 |
@@ -366,12 +369,18 @@ Tag notes 是你笔记之间相互链接的主题文件，构建关系图谱。*
 - **Daily Notes-only 定时**：启用 **Daily Notes → Auto-update Daily Notes without media-note sync**，可以只更新 Daily Notes，不写媒体笔记
 - **强制全量历史刷新**：命令 **Traktr: Force full watch-history refresh** —— 跳过周期间隔，立刻重新拉取整个 Trakt 历史。当你刚在 Trakt 上删了一个错误的 scrobble、想立刻让插件检测到，可以用这个
 - **清空 TMDB 缓存**：命令 **Traktr: Clear TMDB metadata cache** —— 清空所有已缓存的 TMDB 条目。下次同步会从 TMDB 重新拉取所有元数据。和 Settings → TMDB → **Clear cache** 按钮等效
+- **清空 OMDb 缓存**：命令 **Traktr: Clear OMDb poster cache** —— 清空本机的
+  海报专用缓存。下一次完整媒体同步可能重新请求这些海报，并计入 OMDb
+  每日限额
 
 ### 同步为什么这么快（0.2.0+）
 
 第一次同步把本地缓存填好之后，后续同步的 API 调用数只取决于真正变了的内容：
 
-- **TMDB 元数据缓存**跨同步、跨设备保留。一部电影的标题 / 海报 / 简介只拉一次，之后一直复用，直到 TTL 过期或你手动 Clear。**典型同步 ~5-10 次 TMDB 调用，而不是 ~1200 次**
+- **TMDB 元数据缓存**会在每台设备的本机 runtime storage 中跨同步保留。
+  一部电影的标题 / 海报 / 简介会复用到 TTL 过期或你手动清空缓存为止
+- **OMDb 海报缓存**与 TMDB 分开，并且只保存在本机。成功结果（包括已知
+  没有海报的条目）会复用 90 天；Daily Notes-only 同步从不请求海报
 - **Trakt 历史增量拉取**用 `?start_at=<上次同步时间>`。一周的新观看通常一页就够（1 次 API 调用）。每隔 `History full-refresh interval (days)` 周期做一次全量重拉以检测删除
 
 完整设计原理见 [`specs/0001-incremental-sync.md`](../specs/0001-incremental-sync.md)。

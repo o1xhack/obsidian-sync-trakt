@@ -113,5 +113,6 @@
 |---|---|
 | Trakt client ID + secret | [Trakt API Applications](https://app.trakt.tv/settings/apps/api) → 点你的应用 |
 | TMDB API key (v3 auth) | <https://www.themoviedb.org/settings/api> |
+| OMDb API key | OMDb 激活邮件；需要重新申请时打开 <https://www.omdbapi.com/apikey.aspx> |
 
 Trakt access token 自动刷新，你不用管。TMDB API key 不会过期。

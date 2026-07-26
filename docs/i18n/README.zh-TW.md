@@ -120,24 +120,30 @@ trakt_metadata_language: zh-TW
 ## 🚀 快速開始
 
 1. 設定 → 第三方外掛 → **瀏覽** → 搜尋 **Sync Trakt** → **安裝** → **啟用**
-2. 設定 → **Sync Trakt** → 填 Trakt + TMDB API key（[設定指南](SETUP.zh-TW.md)）
+2. 設定 → **Sync Trakt** → 連接 Trakt，並依需要填入選填的 TMDB / OMDb API key（[設定指南](SETUP.zh-TW.md)）
 3. 命令面板 → **Sync Trakt: Sync**
 
 ## 🔑 API key 各自解鎖什麼
 
-外掛用到兩個 API。**Trakt 是必需的** —— 沒有它什麼都同步不了。**TMDB 是可選的**，但解鎖的恰好是大多數人安裝本外掛的真正動機。具體如下：
+外掛會連接三個服務。**Trakt 是必需的** —— 沒有它什麼都同步不了。
+**TMDB 是選填的**，提供更完整的本地化和首選海報；**OMDb 也是選填的**，
+只依 IMDb ID 查詢海報。
 
-| 功能 | Trakt API<br/>_（必需）_ | TMDB API<br/>_（推薦）_ |
-|---|:---:|:---:|
-| 同步 Trakt 庫（watchlist、watched、favorites、ratings） | ✅ | — |
-| 逐集觀看時間戳 | ✅ | — |
-| title / overview / tagline 翻譯成你的語言 | ✅ 基礎 | ✅ 更高品質 |
-| **genres 翻譯成你的語言** | ❌ | ✅ |
-| **筆記內嵌入海報圖片** | ❌ | ✅ |
+| 功能 | Trakt API<br/>_（必需）_ | TMDB API<br/>_（推薦）_ | OMDb API<br/>_（選填）_ |
+|---|:---:|:---:|:---:|
+| 同步 Trakt 庫（watchlist、watched、favorites、ratings） | ✅ | — | — |
+| 逐集觀看時間戳 | ✅ | — | — |
+| title / overview / tagline 翻譯成你的語言 | ✅ 基礎 | ✅ 更高品質 | — |
+| **genres 翻譯成你的語言** | ❌ | ✅ | — |
+| **筆記內嵌入海報圖片** | ❌ | ✅ | ✅ |
 
-如果你只想看英文內容、也不在意海報，TMDB 可以留空 —— 光 Trakt 就夠。如果想要非英文的完整本地化（包括 genres 和海報），**請填 TMDB key**（[免費註冊](https://www.themoviedb.org/settings/api)）。貼上 key 之後，點旁邊的 **Test** 按鈕驗證是否有效，再做第一次同步。
+只要英文內容且不需要海報時，光 Trakt 就夠。需要本地化 genres 和 TMDB
+海報時加入 [TMDB key](https://www.themoviedb.org/settings/api)；需要海報回退
+或不使用 TMDB 也想取得海報時，加入
+[OMDb key](https://www.omdbapi.com/apikey.aspx)。OMDb 免費 key 每天最多
+1,000 次請求，Daily Notes-only 同步不會消耗這項限額。
 
-→ [兩個 key 的完整設定教學](SETUP.zh-TW.md)
+→ [全部 key 的完整設定教學](SETUP.zh-TW.md)
 
 ## 📦 安裝
 
@@ -181,7 +187,7 @@ npm run test:i18n  # 跑煙霧測試
 
 | 文件 | 用途 |
 |---|---|
-| [SETUP](SETUP.zh-TW.md) | Trakt + TMDB API 申請，首次設定，常見問題 |
+| [SETUP](SETUP.zh-TW.md) | Trakt 與可選的 TMDB / OMDb API 申請，首次設定，常見問題 |
 | [MANUAL](MANUAL.zh-TW.md) | 完整設定參考、frontmatter 欄位、範本變數、同步行為 |
 | [DEVELOPER](../DEVELOPER.md) | 架構概覽、資料流、擴充指南（僅英文） |
 | [docs/i18n/](.) | README / SETUP / MANUAL 的 8 種語言翻譯 |

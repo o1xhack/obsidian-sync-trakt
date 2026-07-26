@@ -175,6 +175,7 @@ to use a different `Notes folder` in its settings.
 |---|---|
 | Trakt client ID + secret | [Trakt API Applications](https://app.trakt.tv/settings/apps/api) → click your app |
 | TMDB API key (v3 auth) | <https://www.themoviedb.org/settings/api> |
+| OMDb API key | Your OMDb activation email; request a replacement at <https://www.omdbapi.com/apikey.aspx> |
 
 Trakt access tokens auto-refresh; you don't need to do anything. TMDB API keys
 don't expire.
