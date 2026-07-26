@@ -113,6 +113,7 @@ import {
   getDefaultShowTemplate,
   getEffectiveMetadataLanguage,
   getEffectiveTemplateLanguage,
+  resetSettingsToDefaults,
   type TraktrSettings,
   LOCAL_ELIGIBLE_KEYS,
   DEFAULT_LOCAL_KEYS,
@@ -681,6 +682,66 @@ console.log("\n[10] DEFAULT_SETTINGS still produces English UI + EN templates");
     DEFAULT_SHOW_TEMPLATE_EN,
     "showNoteTemplate default is the English template",
   );
+}
+
+console.log("\n[10b] Reset creates fresh mutable runtime state");
+{
+  const settings = withSettings({
+    accessToken: "keep-access",
+    tmdbApiKey: "keep-tmdb",
+    omdbApiKey: "keep-omdb",
+    uiLanguage: "zh-CN",
+    tmdbCache: {
+      "movie:155:default": {
+        poster_url: "https://example.com/tmdb.jpg",
+        translation: null,
+        cached_at: 1,
+        expires_at: 2,
+      },
+    },
+    omdbPosterCache: {
+      "omdb:tt0468569": {
+        poster_url: "https://example.com/omdb.jpg",
+        cached_at: 1,
+        expires_at: 2,
+      },
+    },
+    historyState: {
+      ...EMPTY_HISTORY_STATE,
+      byMovie: { 4: ["2026-07-25T00:00:00.000Z"] },
+      byShow: {},
+      knownEventIds: [1],
+    },
+  });
+  const sharedReference = settings;
+
+  resetSettingsToDefaults(settings);
+  assertTrue(settings === sharedReference,
+    "reset preserves the shared settings object reference");
+  assertEq(settings.tmdbCache, {}, "reset clears TMDB cache");
+  assertEq(settings.omdbPosterCache, {}, "reset clears OMDb cache");
+  assertEq(settings.historyState.byMovie, {}, "reset clears movie history");
+  assertEq(settings.historyState.knownEventIds, [],
+    "reset clears known history event ids");
+  assertEq(settings.accessToken, "keep-access",
+    "reset preserves Trakt authentication");
+  assertEq(settings.tmdbApiKey, "keep-tmdb", "reset preserves TMDB key");
+  assertEq(settings.omdbApiKey, "keep-omdb", "reset preserves OMDb key");
+  assertEq(settings.uiLanguage, "zh-CN", "reset preserves UI language");
+
+  const firstResetOmdbCache = settings.omdbPosterCache;
+  settings.omdbPosterCache["omdb:tt0468569"] = {
+    poster_url: "https://example.com/after-reset.jpg",
+    cached_at: 3,
+    expires_at: 4,
+  };
+  resetSettingsToDefaults(settings);
+  assertTrue(settings.omdbPosterCache !== firstResetOmdbCache,
+    "each reset creates a new OMDb cache object");
+  assertEq(settings.omdbPosterCache, {},
+    "a second reset clears posters cached after the first reset");
+  assertEq(DEFAULT_SETTINGS.omdbPosterCache, {},
+    "cache writes after reset never mutate DEFAULT_SETTINGS");
 }
 
 // ── Test 11: mergeHistoryEvents — additive merge (movie + show) ───────────

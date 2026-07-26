@@ -1265,6 +1265,44 @@ export const DEFAULT_SETTINGS: TraktrSettings = {
 };
 
 /**
+ * Reset settings in place so SyncEngine and AuthModal keep their shared
+ * reference. Mutable runtime state must be recreated instead of copied from
+ * DEFAULT_SETTINGS; otherwise a later cache write would mutate the defaults
+ * and make a subsequent reset reuse populated cache objects.
+ */
+export function resetSettingsToDefaults(settings: TraktrSettings): void {
+  const {
+    accessToken,
+    refreshToken,
+    clientId,
+    clientSecret,
+    tokenExpiresAt,
+    tmdbApiKey,
+    omdbApiKey,
+    uiLanguage,
+  } = settings;
+
+  Object.assign(settings, DEFAULT_SETTINGS, {
+    accessToken,
+    refreshToken,
+    clientId,
+    clientSecret,
+    tokenExpiresAt,
+    tmdbApiKey,
+    omdbApiKey,
+    uiLanguage,
+    tmdbCache: {},
+    omdbPosterCache: {},
+    historyState: {
+      ...EMPTY_HISTORY_STATE,
+      byMovie: {},
+      byShow: {},
+      knownEventIds: [],
+    },
+  });
+}
+
+/**
  * [0.6.0] Settings page tab ids — see spec 0005. Persisted per-device
  * in localStorage so each Mac/iPhone remembers its own last-viewed tab.
  */
@@ -2673,28 +2711,9 @@ export class TraktrSettingTab extends PluginSettingTab {
               confirm: "confirm.reset.confirm",
             });
             if (!confirmed) return;
-            const {
-              accessToken,
-              refreshToken,
-              clientId,
-              clientSecret,
-              tokenExpiresAt,
-              tmdbApiKey,
-              omdbApiKey,
-              uiLanguage,
-            } = this.plugin.settings;
             // Preserve auth + UI language across reset; everything else
             // goes back to its default.
-            Object.assign(this.plugin.settings, DEFAULT_SETTINGS, {
-              accessToken,
-              refreshToken,
-              clientId,
-              clientSecret,
-              tokenExpiresAt,
-              tmdbApiKey,
-              omdbApiKey,
-              uiLanguage,
-            });
+            resetSettingsToDefaults(this.plugin.settings);
             await this.plugin.saveSettings();
             this.plugin.configureAutoSync();
             this.plugin.configureDailyNotesAutoSync();
