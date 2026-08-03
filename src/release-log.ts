@@ -42,6 +42,13 @@ export interface ReleaseHighlight {
  */
 export const RELEASE_LOG: ReleaseLogEntry[] = [
   {
+    version: "1.4.0",
+    titleEn: "Flexible poster sources and safer watchlist cleanup",
+    titleZh: "灵活的海报来源与更安全的想看状态清理",
+    en: "Adds optional native OMDb poster support with Auto, TMDB only, and OMDb only modes. Auto keeps TMDB first and falls back to OMDb by IMDb ID, while a separate 90-day local cache protects OMDb request limits. OMDb remains poster-only and does not replace Trakt or TMDB metadata. Full media sync also clears stale watchlist properties, tags, and tag-note links when an item leaves an enabled Trakt watchlist, without deleting the retained media note.",
+    zh: "新增可选的原生 OMDb 海报支持，提供 Auto、仅 TMDB 和仅 OMDb 三种模式。Auto 会优先使用 TMDB，并按 IMDb ID 回退到 OMDb；独立的 90 天本机缓存可减少 OMDb 请求额度消耗。OMDb 只用于海报，不会替换 Trakt 或 TMDB 元数据。完整媒体同步现在还会在条目离开已启用的 Trakt 想看列表时，清除过期的想看属性、标签和标签笔记链接，同时保留媒体笔记本身。",
+  },
+  {
     version: "1.3.1",
     titleEn: "Safer cross-platform note reconciliation",
     titleZh: "更安全的跨平台笔记对账",
@@ -149,6 +156,14 @@ export const RELEASE_LOG: ReleaseLogEntry[] = [
 ];
 
 export const RECENT_UPDATE_HIGHLIGHTS: ReleaseHighlight[] = [
+  {
+    en: "Optional OMDb poster lookup adds Auto, TMDB-only, and OMDb-only source modes with a quota-aware local cache.",
+    zh: "可选的 OMDb 海报查询新增 Auto、仅 TMDB 和仅 OMDb 模式，并使用额度友好的本机缓存。",
+  },
+  {
+    en: "Full sync clears stale watchlist properties and tags when retained items leave an enabled Trakt watchlist.",
+    zh: "保留的条目离开已启用的 Trakt 想看列表时，完整同步会清理过期的想看属性与标签。",
+  },
   {
     en: "Smart community rating/vote writes reduce media-note churn from tiny Trakt rating changes.",
     zh: "Smart 社区评分/投票数写入可减少 Trakt 微小评分变化造成的媒体笔记改写。",

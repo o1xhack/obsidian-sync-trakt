@@ -9,6 +9,13 @@ For the full design rationale behind major changes, see [`specs/`](specs/).
 
 ## Unreleased
 
+## 1.4.0 — 2026-08-03
+
+**Flexible poster sources and safer watchlist reconciliation.** This release
+adds optional OMDb poster lookup while keeping TMDB as the default metadata
+provider, and removes stale watchlist state when items leave an enabled Trakt
+watchlist.
+
 ### Added
 
 - Optional native OMDb poster support with `Auto`, `TMDB only`, and
