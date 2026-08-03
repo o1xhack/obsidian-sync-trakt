@@ -25,7 +25,7 @@
 手動インストール：
 
 1. [最新リリース](https://github.com/o1xhack/obsidian-sync-trakt/releases/latest) から `main.js`、`manifest.json`、`styles.css` をダウンロード
-2. vault に `.obsidian/plugins/obsidian-sync-trakt/` フォルダを作成
+2. vault に `.obsidian/plugins/sync-trakt/` フォルダを作成
 3. 3 つのファイルをそのフォルダにコピー
 4. Obsidian を開く → 設定 → コミュニティプラグイン → **Sync Trakt** を有効化
 
@@ -42,15 +42,18 @@
 3. **Redirect URIs** に `urn:ietf:wg:oauth:2.0:oob` を入力
 4. **Create** をクリック。**Client ID** と **Client Secret** をコピー
 
-### 3b.（任意）TMDB API キーの取得
+### 3b.（任意）メタデータとポスターの提供元を設定
 
-ポスター画像は [The Movie Database](https://themoviedb.org) から取得されます。無料 API キーで十分です。スキップした場合、ノートはポスター画像なしで作成されます。
+TMDB はローカライズ済みメタデータと優先ポスターを提供します。TMDB
+キーがない場合、ローカライズは Trakt にフォールバックしますが、任意の
+OMDb キーがあれば IMDb ID によるポスター取得は可能です。
 
 1. themoviedb.org でアカウント作成
 2. **Settings → API → Create → Developer**
 3. **API Key (v3 auth)** をコピー
 
-完全な申請フローは [SETUP.ja.md](SETUP.ja.md) を参照してください。
+TMDB の完全な申請手順と OMDb 無料キーの有効化手順は
+[SETUP.ja.md](SETUP.ja.md) を参照してください。
 
 ---
 
@@ -79,14 +82,19 @@
 | Trakt Client Secret | 同じアプリケーションページから。 |
 | Connection status | 現在の状態を表示；接続または切断ボタン。 |
 
-### TMDB（ポスター画像）
+### メタデータとポスターのプロバイダー
 
 | 設定 | デフォルト | 説明 |
 |---|---|---|
-| TMDB API key | _(空)_ | 任意。空のままにするとポスター画像をスキップ。 |
-| Poster size | `w500` | TMDB から取得される画像幅のバリアント。選択肢：w92、w154、w185、w342、w500、w780、original。 |
+| TMDB API key | _(空)_ | 完全なメタデータのローカライズと TMDB ポスターに推奨。未設定の場合、ローカライズは Trakt にフォールバックし、OMDb を設定すればポスターを取得できます。 |
+| Poster source | `Auto (TMDB → OMDb)` | `Auto` は TMDB を優先し、TMDB にポスターがない場合は OMDb にフォールバックします。`TMDB only` と `OMDb only` は、ポスターに指定したプロバイダーだけを使用します。翻訳元はこの設定から独立しています。 |
+| Poster size | `w500` | TMDB から取得される画像幅のバリアント。OMDb の画像解像度は OMDb 側で決まります。選択肢：w92、w154、w185、w342、w500、w780、original。 |
 | TMDB cache TTL | `90 日` | キャッシュされた TMDB メタデータが再検証されるまでの期間。**Never expire** にすると永続化（手動クリアのみ）。期限切れエントリは即座に古い値を返し、バックグラウンドで非同期更新するため、同期がブロックされることはありません。各エントリには ±5 日のジッターが付くので、1000 以上のエントリが同じ日に一斉に期限切れになりません。詳細は [spec 0001](../specs/0001-incremental-sync.md) §A 参照。 |
-| Clear cache | _(ボタン)_ | キャッシュされた全エントリを削除します。次回の同期で TMDB から全件再取得します（大きなライブラリでは数分かかる場合あり）。設定の説明欄に現在のキャッシュエントリ数が表示されます。 |
+| Clear cache | _(ボタン)_ | キャッシュされた TMDB メタデータをすべて削除します。次回の同期で TMDB から全件再取得します（大きなライブラリでは数分かかる場合あり）。設定の説明欄に現在のキャッシュエントリ数が表示されます。 |
+| OMDb API key | _(空)_ | 任意のポスター専用フォールバック。無料キーは 1 日 1,000 リクエストまでです。専用の高解像度 Poster API は Patreon 向けで、通常の結果は低解像度または画像なしの場合があります。検索には IMDb ID が必要です。 |
+| Clear OMDb cache | _(ボタン)_ | プロバイダー別のローカルポスターキャッシュを削除します。ポスターなしを含む成功した検索結果は 90 日間キャッシュされます。 |
+
+OMDb のコンテンツは [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) で公開されています。Sync Trakt は通常のタイトルデータ応答に含まれるポスター URL のみを保存し、Patreon 限定の高解像度 Poster API は使用しません。
 
 ### Localization
 
@@ -99,7 +107,7 @@
 
 ローカライズが有効な場合、同期は次の順序で翻訳を解決します：
 
-1. **TMDB**（優先）— アイテムごとに 1 回の結合呼び出しで、ローカライズされた `title` / `overview` / `tagline` / `genres` とポスター URL を返します。TMDB API キーが必要。
+1. **TMDB**（優先）— アイテムごとに 1 回の結合呼び出しで、ローカライズされた `title` / `overview` / `tagline` / `genres` を返します。TMDB API キーが必要です。ポスター取得元は **Poster source** で別に選択します。
 2. **Trakt `/translations/{lang}`**（フォールバック）— TMDB API キーが設定されていない場合に使用。`title` / `overview` / `tagline` のみカバーし、`genres` は英語のまま。
 3. **英語の原文** — どちらの API も要求された言語の翻訳を持たない場合、フィールドごとにフォールバック。
 
@@ -186,7 +194,8 @@ Tag notes はノートからリンクするトピックファイルで、接続�
 
 ### Reset
 
-**Reset to defaults** はすべての設定をデフォルトに戻します。認証情報と TMDB API キーは保持されます。
+**Reset to defaults** はすべての設定をデフォルトに戻します。認証情報と
+TMDB / OMDb API キーは保持されます。
 
 ---
 
@@ -232,7 +241,7 @@ Tag notes はノートからリンクするトピックファイルで、接続�
 | `trakt_rated_at` | string | 評価の ISO タイムスタンプ。 |
 | `trakt_url` | string | Trakt ページ URL。 |
 | `trakt_imdb_url` | string | IMDB ページ URL。 |
-| `trakt_poster_url` | string | TMDB ポスター画像 URL。 |
+| `trakt_poster_url` | string | 選択した提供元が返すポスター画像 URL。 |
 | `trakt_synced_at` | string | このノートが**実際に sync によって変更された**最終時刻（ISO タイムスタンプ）。0.3.0 以降、ノート内容に実質的な変化があったときのみ更新され、毎回の sync では更新されません。Bases / Dataview の「最近変更されたノート」ビューのソートキーとして利用できます。 |
 | `trakt_community_stats_synced_at` | string | Smart モードが最後に `trakt_rating` / `trakt_votes` を実際に書き込んだ ISO タイムスタンプ。既存ノートでは、コミュニティ統計の次回更新が許可されるまで存在しない場合がある。 |
 | `trakt_tag_notes` | list | tag note ファイルへの wikilink（「Add tag notes to frontmatter」が ON の場合）。 |
@@ -362,12 +371,20 @@ Tag notes はノートからリンクするトピックファイルで、接続�
 - **Daily Notes-only スケジュール**：**Daily Notes → Auto-update Daily Notes without media-note sync** を有効化すると、メディアノートを書かずに Daily Notes だけを更新できます
 - **視聴履歴の強制全件刷新**：コマンド **Traktr: Force full watch-history refresh** — 周期間隔をスキップして Trakt 履歴全体を即座に再取得。Trakt で誤った scrobble を削除して、すぐにプラグインに反映させたいときに使用
 - **TMDB キャッシュをクリア**：コマンド **Traktr: Clear TMDB metadata cache** — キャッシュ済み TMDB エントリを全て削除。次回の同期で TMDB から全メタデータを再取得。Settings → TMDB → **Clear cache** ボタンと同じ効果
+- **OMDb キャッシュをクリア**：コマンド **Traktr: Clear OMDb poster cache**
+  — 端末内のポスター専用キャッシュを削除します。次回の完全なメディア同期
+  ではポスターが再リクエストされ、OMDb の日次上限に加算される場合があります
 
 ### 同期が高速な理由（0.2.0+）
 
 最初の同期でローカルキャッシュが満たされると、以降の同期は本当に変更があったデータの API 呼び出しのみで完了します：
 
-- **TMDB メタデータキャッシュ**は同期間・デバイス間で永続。映画のタイトル / ポスター / あらすじは一度取得されれば、TTL 経過または手動 Clear まで再利用。**典型的な同期では ~1200 回ではなく ~5-10 回の TMDB 呼び出し**
+- **TMDB メタデータキャッシュ**は各端末のローカル runtime storage に保存
+  され、同期をまたいで再利用されます。タイトル / ポスター / あらすじは
+  TTL 経過または手動 Clear まで再利用されます
+- **OMDb ポスターキャッシュ**は TMDB と分離され、端末内だけに保存されます。
+  ポスターがないことを含む確定結果は 90 日間再利用され、Daily Notes-only
+  同期ではポスターをリクエストしません
 - **Trakt 履歴の増分取得**は `?start_at=<前回同期時刻>` を使用。1 週間分の新規視聴は通常 1 ページに収まる（1 API 呼び出し）。`History full-refresh interval (days)` ごとに周期的全件再取得を実行して削除を検出
 
 完全な設計の根拠は [`specs/0001-incremental-sync.md`](../specs/0001-incremental-sync.md) を参照。

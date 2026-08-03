@@ -28,7 +28,7 @@ Notes control calls which API and writes which files, see
 Manual install:
 
 1. Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/o1xhack/obsidian-sync-trakt/releases/latest)
-2. In your vault, create the folder `.obsidian/plugins/obsidian-sync-trakt/`
+2. In your vault, create the folder `.obsidian/plugins/sync-trakt/`
 3. Copy the three files into that folder
 4. Open Obsidian → Settings → Community plugins → enable **Sync Trakt**
 
@@ -47,13 +47,18 @@ Or via [BRAT](https://github.com/TfTHacker/obsidian42-brat): add the beta plugin
 3. For **Redirect URIs**, enter `urn:ietf:wg:oauth:2.0:oob`
 4. Click **Create**. Copy the **Client ID** and **Client Secret**
 
-### 3b. (Optional) Get a TMDB API key
+### 3b. (Optional) Configure metadata and poster providers
 
-Poster images are fetched from [The Movie Database](https://themoviedb.org). A free API key is sufficient. If you skip this, notes are created without poster images.
+TMDB provides localized metadata and the primary poster source. Without a TMDB
+key, localization falls back to Trakt; an optional OMDb key can still provide
+posters by IMDb ID.
 
 1. Create an account at themoviedb.org
 2. Go to **Settings → API → Create → Developer**
 3. Copy the **API Key (v3 auth)**
+
+See [SETUP.md](SETUP.md) for the full TMDB application walkthrough and OMDb
+free-key activation steps.
 
 ---
 
@@ -82,14 +87,23 @@ Access tokens are refreshed automatically before each sync (no manual re-authent
 | Trakt Client Secret | From the same application page. |
 | Connection status | Shows current state; buttons to connect or disconnect. |
 
-### TMDB (poster images)
+### Metadata and poster providers
 
 | Setting | Default | Description |
 |---|---|---|
-| TMDB API key | _(blank)_ | Optional. Leave blank to skip poster images. |
-| Poster size | `w500` | Image width variant fetched from TMDB. Options: w92, w154, w185, w342, w500, w780, original. |
+| TMDB API key | _(blank)_ | Recommended for complete metadata localization and TMDB posters. Without it, localization falls back to Trakt and posters can still use OMDb. |
+| Poster source | `Auto (TMDB → OMDb)` | `Auto` uses TMDB first and falls back to OMDb when no TMDB poster is available. `TMDB only` and `OMDb only` never query the other provider for posters. Translation remains independent. |
+| Poster size | `w500` | Image width variant fetched from TMDB. OMDb controls its own image resolution. Options: w92, w154, w185, w342, w500, w780, original. |
 | TMDB cache TTL | `90 days` | How long cached TMDB metadata stays fresh before being revalidated. **Never expire** keeps entries indefinitely (only manually cleared). Stale entries are returned immediately and refreshed in the background, so syncs are never blocked. Each entry gets ±5 days jitter, so 1000+ items don't all expire on the same day. See [spec 0001](specs/0001-incremental-sync.md) §A. |
-| Clear cache | _(button)_ | Drops every cached metadata entry. The next sync re-fetches everything from TMDB (takes a few minutes for large libraries). The setting label shows the current entry count. |
+| Clear cache | _(button)_ | Drops every cached TMDB metadata entry. The next sync re-fetches everything from TMDB (takes a few minutes for large libraries). The setting label shows the current entry count. |
+| OMDb API key | _(blank)_ | Optional poster-only fallback. Free keys allow 1,000 requests/day. The dedicated high-resolution Poster API requires Patreon; regular results may be lower resolution or missing. Queries require an IMDb ID. |
+| Clear OMDb cache | _(button)_ | Drops the provider-specific local poster cache. Successful lookups, including titles with no poster, are cached for 90 days. |
+
+OMDb content is published under
+[CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). Sync Trakt
+uses the regular title-data response and stores only the returned poster URL;
+it does not use or promise access to OMDb's patron-only high-resolution Poster
+API.
 
 ### Localization
 
@@ -102,7 +116,7 @@ Optional. Translate `title`, `overview`, `tagline`, and `genres` in synced notes
 
 When localization is enabled, sync resolves translations in this order:
 
-1. **TMDB** (preferred) — one combined call per item that returns the localized `title` / `overview` / `tagline` / `genres` plus the poster URL. Requires a TMDB API key.
+1. **TMDB** (preferred) — one combined call per item that returns the localized `title` / `overview` / `tagline` / `genres` and, depending on the selected poster source, a poster URL. Requires a TMDB API key.
 2. **Trakt `/translations/{lang}`** (fallback) — used when no TMDB API key is configured. Covers `title` / `overview` / `tagline` only; `genres` stay in English.
 3. **English original** — used field-by-field when neither API has a translation in the requested language.
 
@@ -189,7 +203,8 @@ Tag notes are topic files you link to from your notes, creating a graph of conne
 
 ### Reset
 
-**Reset to defaults** restores all settings to their defaults. Authentication credentials and TMDB API key are preserved.
+**Reset to defaults** restores all settings to their defaults. Authentication
+credentials and TMDB / OMDb API keys are preserved.
 
 ---
 
@@ -235,7 +250,7 @@ All fields below are prefixed with the configured **Property prefix** (default `
 | `trakt_rated_at` | string | ISO timestamp when rated. |
 | `trakt_url` | string | Trakt page URL. |
 | `trakt_imdb_url` | string | IMDB page URL. |
-| `trakt_poster_url` | string | TMDB poster image URL. |
+| `trakt_poster_url` | string | Poster image URL from the selected provider. |
 | `trakt_synced_at` | string | ISO timestamp of when sync last *actually modified this note*. Since 0.3.0, only updates when the note's content changes — not on every sync. Useful as a Bases / Dataview sort key for "recently changed" views. |
 | `trakt_community_stats_synced_at` | string | ISO timestamp of when Smart mode last wrote `trakt_rating` / `trakt_votes`. Existing notes may not have this until community stats are next allowed to update. |
 | `trakt_tag_notes` | list | Wikilinks to tag note files (when "Add tag notes to frontmatter" is on). |
@@ -372,12 +387,20 @@ When you switch **Metadata language** and run sync again:
 - **Daily Notes backfill**: use **Daily Notes → Manual backfill** to refresh enabled Sync sources and write existing Daily Note files in a selected date range
 - **Force full history refresh**: command **Traktr: Force full watch-history refresh** — bypasses the periodic interval and immediately re-pulls the entire Trakt history. Useful when you've just deleted a wrong scrobble on Trakt and want the plugin to detect it now
 - **Clear TMDB cache**: command **Traktr: Clear TMDB metadata cache** — empties every cached TMDB entry. The next sync re-fetches all metadata from TMDB. Same effect as the Settings → TMDB → **Clear cache** button
+- **Clear OMDb cache**: command **Traktr: Clear OMDb poster cache** — empties
+  the local poster-only cache. The next full media sync may request those
+  posters again and count against the OMDb daily limit
 
 ### How sync stays fast (0.2.0+)
 
 After the first sync seeds the local caches, subsequent syncs are bounded by API calls for genuinely new data:
 
-- **TMDB metadata cache** survives across syncs and across devices. A movie's title / poster / overview is fetched once and reused until either the configured TTL elapses or you click Clear cache. ~5-10 calls per typical sync instead of ~1200
+- **TMDB metadata cache** survives across syncs in each device's local runtime
+  storage. A movie's title / poster / overview is reused until either the
+  configured TTL elapses or you click Clear cache
+- **OMDb poster cache** is separate and local to each device. Successful
+  results, including known missing posters, are reused for 90 days; Daily
+  Notes-only sync never requests posters
 - **Trakt history incremental fetch** uses `?start_at=<lastSync>`. A normal week's worth of new watches usually fits in a single page (1 API call). The periodic full re-pull happens once per `History full-refresh interval (days)` to catch deletions
 
 See [`specs/0001-incremental-sync.md`](specs/0001-incremental-sync.md) for the full design rationale.

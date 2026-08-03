@@ -23,6 +23,7 @@ import { AuthModal } from "./trakt-auth";
 import { SyncEngine } from "./sync-engine";
 import { getTranslator, type UiLanguage } from "./i18n";
 import { clearTmdbCache } from "./tmdb-api";
+import { clearOmdbPosterCache } from "./omdb-api";
 import {
   buildSlimSyncedHistoryState,
   mergeSyncedHistoryFields,
@@ -230,6 +231,23 @@ export default class TraktrPlugin extends Plugin {
         clearTmdbCache(this.settings.tmdbCache);
         await this.saveSettings();
         new Notice(tNow("tmdb.cache.clear.notice"));
+      },
+    });
+
+    this.addCommand({
+      id: "trakt-clear-omdb-cache",
+      name: t("cmd.clearOmdbCache"),
+      callback: async () => {
+        const tNow = getTranslator(this.settings.uiLanguage);
+        const confirmed = await confirmDangerousAction(this.app, tNow, {
+          title: "confirm.clearOmdb.title",
+          body: "confirm.clearOmdb.body",
+          confirm: "confirm.clearOmdb.confirm",
+        });
+        if (!confirmed) return;
+        clearOmdbPosterCache(this.settings.omdbPosterCache);
+        await this.saveSettings();
+        new Notice(tNow("omdb.cache.clear.notice"));
       },
     });
 
@@ -631,6 +649,7 @@ export default class TraktrPlugin extends Plugin {
     const runtime = preferredRuntime ?? (await this.runtimeStore.load());
     if (runtime) {
       this.settings.tmdbCache = runtime.tmdbCache;
+      this.settings.omdbPosterCache = runtime.omdbPosterCache ?? {};
       this.settings.historyState = mergeSyncedHistoryFields(
         runtime.historyState,
         synced?.historyState,
@@ -640,6 +659,7 @@ export default class TraktrPlugin extends Plugin {
 
     const hadSyncedRuntime = syncedPayloadContainsRuntimeData(synced);
     this.settings.tmdbCache = synced?.tmdbCache ?? {};
+    this.settings.omdbPosterCache = synced?.omdbPosterCache ?? {};
     this.settings.historyState = mergeSyncedHistoryFields(
       synced?.historyState ?? { ...EMPTY_HISTORY_STATE },
       synced?.historyState,
@@ -654,6 +674,7 @@ export default class TraktrPlugin extends Plugin {
     return {
       schemaVersion: RUNTIME_STORAGE_SCHEMA_VERSION,
       tmdbCache: this.settings.tmdbCache,
+      omdbPosterCache: this.settings.omdbPosterCache,
       historyState: this.settings.historyState,
     };
   }
@@ -664,6 +685,7 @@ export default class TraktrPlugin extends Plugin {
       delete synced[key];
     }
     synced.tmdbCache = {};
+    synced.omdbPosterCache = {};
     synced.historyState = buildSlimSyncedHistoryState(
       this.settings.historyState,
     );

@@ -1,5 +1,10 @@
 import type { App } from "obsidian";
-import { EMPTY_HISTORY_STATE, type HistoryState, type TmdbCache } from "./types";
+import {
+  EMPTY_HISTORY_STATE,
+  type HistoryState,
+  type OmdbPosterCache,
+  type TmdbCache,
+} from "./types";
 
 export const RUNTIME_STORAGE_SCHEMA_VERSION = 1 as const;
 const RUNTIME_DB_NAME = "sync-trakt-runtime";
@@ -9,12 +14,16 @@ export const RUNTIME_STORAGE_KEY_PREFIX = "sync-trakt:runtime:v1";
 export interface RuntimeStoragePayload {
   schemaVersion: typeof RUNTIME_STORAGE_SCHEMA_VERSION;
   tmdbCache: TmdbCache;
+  /** Optional for backward compatibility with runtime payloads written before
+   * native OMDb poster support was added. */
+  omdbPosterCache?: OmdbPosterCache;
   historyState: HistoryState;
 }
 
 type RuntimeBackend = "indexeddb" | "localStorage";
 type RuntimeCarrier = {
   tmdbCache?: TmdbCache;
+  omdbPosterCache?: OmdbPosterCache;
   historyState?: Partial<HistoryState>;
 };
 
@@ -48,10 +57,12 @@ export function syncedPayloadContainsRuntimeData(
 ): boolean {
   if (!synced) return false;
   const tmdbEntries = Object.keys(synced.tmdbCache ?? {}).length;
+  const omdbEntries = Object.keys(synced.omdbPosterCache ?? {}).length;
   const history = synced.historyState;
-  if (!history) return tmdbEntries > 0;
+  if (!history) return tmdbEntries > 0 || omdbEntries > 0;
   return (
     tmdbEntries > 0 ||
+    omdbEntries > 0 ||
     Object.keys(history.byMovie ?? {}).length > 0 ||
     Object.keys(history.byShow ?? {}).length > 0 ||
     (history.knownEventIds ?? []).length > 0 ||

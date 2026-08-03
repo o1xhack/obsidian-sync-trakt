@@ -591,7 +591,7 @@ documented at `docs/i18n/index.md`.
 ## 10. Settings persistence + cross-device sync
 
 `data.json` lives at
-`<vault>/.obsidian/plugins/obsidian-sync-trakt/data.json`. It is
+`<vault>/.obsidian/plugins/sync-trakt/data.json`. It is
 written via Obsidian's `saveData()` and loaded via `loadData()`.
 Both are JSON; no encryption.
 

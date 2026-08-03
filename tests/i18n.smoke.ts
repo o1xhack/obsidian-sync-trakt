@@ -41,6 +41,15 @@ import {
   type TmdbMovieResponse,
 } from "../src/tmdb-api";
 import {
+  clearOmdbPosterCache,
+  createOmdbRequestSession,
+  fetchOmdbPoster,
+  omdbPosterCacheEntryFreshness,
+  omdbPosterCacheKey,
+  omdbPosterCacheStats,
+  verifyOmdbApiKey,
+} from "../src/omdb-api";
+import {
   mergeHistoryEvents,
   replaceFromFullRefresh,
   shouldRunFullRefresh,
@@ -61,6 +70,8 @@ import {
   dedupeDuplicateNotes,
   disambiguatedFilename,
   findMatchingIdentityFile,
+  shouldFetchOmdbPosterForItem,
+  shouldFetchTmdbMetadata,
 } from "../src/sync-engine";
 import {
   localTodayISODate,
@@ -85,6 +96,7 @@ import {
 import {
   EMPTY_HISTORY_STATE,
   type HistoryState,
+  type OmdbPosterCache,
   type TmdbCache,
   type TmdbCacheEntry,
   type TraktHistoryItem,
@@ -101,6 +113,7 @@ import {
   getDefaultShowTemplate,
   getEffectiveMetadataLanguage,
   getEffectiveTemplateLanguage,
+  resetSettingsToDefaults,
   type TraktrSettings,
   LOCAL_ELIGIBLE_KEYS,
   DEFAULT_LOCAL_KEYS,
@@ -653,6 +666,12 @@ console.log("\n[10] DEFAULT_SETTINGS still produces English UI + EN templates");
     60,
     "Daily Notes auto-sync interval defaults to 60 minutes",
   );
+  assertEq(DEFAULT_SETTINGS.posterSource, "auto",
+    "poster source defaults to backward-compatible Auto mode");
+  assertEq(DEFAULT_SETTINGS.omdbApiKey, "",
+    "OMDb is opt-in with no default key");
+  assertEq(DEFAULT_SETTINGS.omdbPosterCache, {},
+    "OMDb poster cache starts empty");
   assertEq(
     DEFAULT_SETTINGS.movieNoteTemplate,
     DEFAULT_MOVIE_TEMPLATE_EN,
@@ -663,6 +682,66 @@ console.log("\n[10] DEFAULT_SETTINGS still produces English UI + EN templates");
     DEFAULT_SHOW_TEMPLATE_EN,
     "showNoteTemplate default is the English template",
   );
+}
+
+console.log("\n[10b] Reset creates fresh mutable runtime state");
+{
+  const settings = withSettings({
+    accessToken: "keep-access",
+    tmdbApiKey: "keep-tmdb",
+    omdbApiKey: "keep-omdb",
+    uiLanguage: "zh-CN",
+    tmdbCache: {
+      "movie:155:default": {
+        poster_url: "https://example.com/tmdb.jpg",
+        translation: null,
+        cached_at: 1,
+        expires_at: 2,
+      },
+    },
+    omdbPosterCache: {
+      "omdb:tt0468569": {
+        poster_url: "https://example.com/omdb.jpg",
+        cached_at: 1,
+        expires_at: 2,
+      },
+    },
+    historyState: {
+      ...EMPTY_HISTORY_STATE,
+      byMovie: { 4: ["2026-07-25T00:00:00.000Z"] },
+      byShow: {},
+      knownEventIds: [1],
+    },
+  });
+  const sharedReference = settings;
+
+  resetSettingsToDefaults(settings);
+  assertTrue(settings === sharedReference,
+    "reset preserves the shared settings object reference");
+  assertEq(settings.tmdbCache, {}, "reset clears TMDB cache");
+  assertEq(settings.omdbPosterCache, {}, "reset clears OMDb cache");
+  assertEq(settings.historyState.byMovie, {}, "reset clears movie history");
+  assertEq(settings.historyState.knownEventIds, [],
+    "reset clears known history event ids");
+  assertEq(settings.accessToken, "keep-access",
+    "reset preserves Trakt authentication");
+  assertEq(settings.tmdbApiKey, "keep-tmdb", "reset preserves TMDB key");
+  assertEq(settings.omdbApiKey, "keep-omdb", "reset preserves OMDb key");
+  assertEq(settings.uiLanguage, "zh-CN", "reset preserves UI language");
+
+  const firstResetOmdbCache = settings.omdbPosterCache;
+  settings.omdbPosterCache["omdb:tt0468569"] = {
+    poster_url: "https://example.com/after-reset.jpg",
+    cached_at: 3,
+    expires_at: 4,
+  };
+  resetSettingsToDefaults(settings);
+  assertTrue(settings.omdbPosterCache !== firstResetOmdbCache,
+    "each reset creates a new OMDb cache object");
+  assertEq(settings.omdbPosterCache, {},
+    "a second reset clears posters cached after the first reset");
+  assertEq(DEFAULT_SETTINGS.omdbPosterCache, {},
+    "cache writes after reset never mutate DEFAULT_SETTINGS");
 }
 
 // ── Test 11: mergeHistoryEvents — additive merge (movie + show) ───────────
@@ -1517,6 +1596,82 @@ void (async () => {
     assertEq(result.translation?.title, "缓存标题", "returns cached title");
   }
 
+  console.log("\n[25b] translation-only TMDB fetch skips unused poster fallback");
+  {
+    const stub = await import("./stub-obsidian");
+    const cache: TmdbCache = {};
+    const localizedResponse = {
+      poster_path: null,
+      original_title: "Example",
+      original_language: "en",
+      title: "Example",
+      overview: "",
+      tagline: "",
+      genres: [],
+      translations: {
+        translations: [{
+          iso_639_1: "zh",
+          iso_3166_1: "CN",
+          data: { title: "示例", overview: "简介", tagline: "" },
+        }],
+      },
+    };
+    stub.resetRequestUrlMock(({ url }) => ({
+      status: 200,
+      json: url.includes("language=")
+        ? localizedResponse
+        : { ...localizedResponse, poster_path: "/default.jpg" },
+      headers: {},
+    }));
+
+    const translationOnly = await fetchMovieMetadata(
+      1000,
+      "test-key",
+      "w500",
+      "zh-CN",
+      cache,
+      90,
+      "",
+      false,
+    );
+    assertEq(stub.requestUrlMock.calls.length, 1,
+      "OMDb-only localization makes one TMDB request");
+    assertEq(translationOnly.translation?.title, "示例",
+      "translation-only request still returns localized metadata");
+    assertEq(translationOnly.poster_url, "",
+      "translation-only request does not fetch a default TMDB poster");
+    const key = tmdbCacheKey("movie", 1000, "zh-CN");
+    assertEq(cache[key]?.poster_fallback_attempted, false,
+      "cache records that default-poster fallback was skipped");
+
+    stub.resetRequestUrlMock(({ url }) => ({
+      status: 200,
+      json: url.includes("language=")
+        ? localizedResponse
+        : { ...localizedResponse, poster_path: "/default.jpg" },
+      headers: {},
+    }));
+    const posterUpgrade = await fetchMovieMetadata(
+      1000,
+      "test-key",
+      "w500",
+      "zh-CN",
+      cache,
+      90,
+      "",
+      true,
+    );
+    assertEq(stub.requestUrlMock.calls.length, 2,
+      "switching to a TMDB poster source upgrades the incomplete cache");
+    assertEq(
+      posterUpgrade.poster_url,
+      "https://image.tmdb.org/t/p/w500/default.jpg",
+      "cache upgrade fetches the default TMDB poster",
+    );
+    assertEq(cache[key]?.poster_fallback_attempted, true,
+      "upgraded cache records completed poster fallback");
+  }
+
   // ── Test 26-30: spec 0002 diff-based write ────────────────────────────
   // Critical safety property: when frontmatter has any meaningful change,
   // diff MUST return true. False negatives = silent data loss.
@@ -2273,6 +2428,332 @@ void (async () => {
       !rEx.ok && rEx.detail?.includes("ENOTFOUND") === true,
       "exception message surfaced via result.detail",
     );
+  }
+
+  console.log("\n[40a] verifyOmdbApiKey — empty, success, auth, and limit results");
+  {
+    const stub = await import("./stub-obsidian");
+    stub.resetRequestUrlMock(() => ({
+      status: 200,
+      json: { Response: "True", imdbID: "tt0133093" },
+      headers: {},
+    }));
+    const empty = await verifyOmdbApiKey(" ");
+    assertTrue(!empty.ok && empty.reason === "empty",
+      "empty OMDb key short-circuits");
+    assertEq(stub.requestUrlMock.calls.length, 0,
+      "empty OMDb key does not hit the network");
+
+    const valid = await verifyOmdbApiKey("valid key");
+    assertTrue(valid.ok, "successful known-title response verifies OMDb key");
+    assertTrue(
+      stub.requestUrlMock.calls[0].url.includes("apikey=valid+key"),
+      "OMDb key is URL encoded",
+    );
+    assertTrue(
+      stub.requestUrlMock.calls[0].url.includes("i=tt0133093"),
+      "OMDb verification uses a stable IMDb id",
+    );
+
+    stub.resetRequestUrlMock(() => ({
+      status: 200,
+      json: { Response: "False", Error: "Invalid API key!" },
+      headers: {},
+    }));
+    const invalid = await verifyOmdbApiKey("bad");
+    assertTrue(!invalid.ok && invalid.reason === "unauthorized",
+      "OMDb error payload classifies invalid keys");
+
+    stub.resetRequestUrlMock(() => ({
+      status: 200,
+      json: { Response: "False", Error: "Request limit reached!" },
+      headers: {},
+    }));
+    const limited = await verifyOmdbApiKey("limited");
+    assertTrue(!limited.ok && limited.reason === "limit",
+      "OMDb error payload exposes the daily limit");
+  }
+
+  console.log("\n[40b] fetchOmdbPoster — IMDb lookup, normalization, and cache hit");
+  {
+    const stub = await import("./stub-obsidian");
+    stub.resetRequestUrlMock(() => ({
+      status: 200,
+      json: {
+        Response: "True",
+        imdbID: "tt0468569",
+        Poster: "https://example.test/dark-knight.jpg",
+      },
+      headers: {},
+    }));
+    const cache: OmdbPosterCache = {};
+    const first = await fetchOmdbPoster(" TT0468569 ", "key", cache);
+    const second = await fetchOmdbPoster("tt0468569", "key", cache);
+    assertEq(first, "https://example.test/dark-knight.jpg",
+      "OMDb poster URL returned");
+    assertEq(second, first, "normalized IMDb id hits the same cache entry");
+    assertEq(stub.requestUrlMock.calls.length, 1,
+      "fresh OMDb cache hit avoids a second request");
+    assertEq(omdbPosterCacheKey(" TT0468569 "), "omdb:tt0468569",
+      "cache key is provider-aware and normalized");
+    assertEq(
+      omdbPosterCacheEntryFreshness(cache["omdb:tt0468569"]),
+      "fresh",
+      "new OMDb cache entry is fresh",
+    );
+  }
+
+  console.log("\n[40c] fetchOmdbPoster — missing posters cache; failures retry");
+  {
+    const stub = await import("./stub-obsidian");
+    const cache: OmdbPosterCache = {};
+    stub.resetRequestUrlMock(() => ({
+      status: 200,
+      json: { Response: "True", imdbID: "tt0903747", Poster: "N/A" },
+      headers: {},
+    }));
+    assertEq(await fetchOmdbPoster("tt0903747", "key", cache), "",
+      "OMDb N/A poster normalizes to empty");
+    assertEq(await fetchOmdbPoster("tt0903747", "key", cache), "",
+      "known missing poster is served from cache");
+    assertEq(stub.requestUrlMock.calls.length, 1,
+      "known missing poster does not consume the daily limit repeatedly");
+
+    stub.resetRequestUrlMock(() => ({
+      status: 200,
+      json: { Response: "False", Error: "Request limit reached!" },
+      headers: {},
+    }));
+    assertEq(await fetchOmdbPoster("tt0111161", "key", cache), "",
+      "failed lookup returns empty");
+    assertEq(await fetchOmdbPoster("tt0111161", "key", cache), "",
+      "failed lookup remains retryable");
+    assertEq(stub.requestUrlMock.calls.length, 2,
+      "failed responses are not cached");
+
+    const beforeInvalid = stub.requestUrlMock.calls.length;
+    assertEq(await fetchOmdbPoster("not-an-imdb-id", "key", cache), "",
+      "invalid IMDb id is ignored");
+    assertEq(stub.requestUrlMock.calls.length, beforeInvalid,
+      "invalid IMDb id never hits OMDb");
+  }
+
+  console.log("\n[40d] OMDb cache stats + clear");
+  {
+    const cache: OmdbPosterCache = {
+      "omdb:tt0000001": {
+        cache_version: 1,
+        poster_url: "poster",
+        cached_at: 1,
+        expires_at: Number.MAX_SAFE_INTEGER,
+      },
+    };
+    assertEq(omdbPosterCacheStats(cache).entries, 1,
+      "OMDb cache stats count entries");
+    clearOmdbPosterCache(cache);
+    assertEq(omdbPosterCacheStats(cache).entries, 0,
+      "clearOmdbPosterCache removes all entries");
+  }
+
+  console.log("\n[40d-2] OMDb quota circuit breaker is scoped to one sync");
+  {
+    const stub = await import("./stub-obsidian");
+    const cache: OmdbPosterCache = {};
+    const session = createOmdbRequestSession();
+    stub.resetRequestUrlMock(() => ({
+      status: 200,
+      json: { Response: "False", Error: "Request limit reached!" },
+      headers: {},
+    }));
+
+    assertEq(await fetchOmdbPoster("tt0000001", "key", cache, session), "",
+      "quota response returns no poster");
+    assertEq(session.blockedReason, "limit",
+      "quota response trips the current sync's circuit breaker");
+    assertEq(await fetchOmdbPoster("tt0000002", "key", cache, session), "",
+      "later lookup in the same sync short-circuits");
+    assertEq(stub.requestUrlMock.calls.length, 1,
+      "quota circuit breaker prevents more doomed requests");
+
+    const nextSync = createOmdbRequestSession();
+    stub.resetRequestUrlMock(() => ({
+      status: 200,
+      json: {
+        Response: "True",
+        imdbID: "tt0000002",
+        Poster: "https://example.test/retry.jpg",
+      },
+      headers: {},
+    }));
+    assertEq(
+      await fetchOmdbPoster("tt0000002", "key", cache, nextSync),
+      "https://example.test/retry.jpg",
+      "a later sync retries previously blocked entries",
+    );
+    assertEq(stub.requestUrlMock.calls.length, 1,
+      "the circuit breaker does not persist across syncs");
+  }
+
+  console.log("\n[40d-3] OMDb auth failures block one sync; title misses cache");
+  {
+    const stub = await import("./stub-obsidian");
+    const cache: OmdbPosterCache = {};
+    const authSession = createOmdbRequestSession();
+    stub.resetRequestUrlMock(() => ({
+      status: 200,
+      json: { Response: "False", Error: "Invalid API key!" },
+      headers: {},
+    }));
+
+    assertEq(
+      await fetchOmdbPoster("tt0000003", "bad-key", cache, authSession),
+      "",
+      "authentication failure returns no poster",
+    );
+    assertEq(authSession.blockedReason, "unauthorized",
+      "authentication failure blocks the current sync");
+    assertEq(
+      await fetchOmdbPoster("tt0000004", "bad-key", cache, authSession),
+      "",
+      "later lookup in the same sync short-circuits after auth failure",
+    );
+    assertEq(stub.requestUrlMock.calls.length, 1,
+      "auth circuit breaker prevents repeated invalid-key requests");
+
+    stub.resetRequestUrlMock(() => ({
+      status: 200,
+      json: { Response: "False", Error: "Movie not found!" },
+      headers: {},
+    }));
+    const missSession = createOmdbRequestSession();
+    assertEq(
+      await fetchOmdbPoster("tt0000005", "key", cache, missSession),
+      "",
+      "permanent title miss returns no poster",
+    );
+    assertEq(
+      await fetchOmdbPoster("tt0000005", "key", cache, missSession),
+      "",
+      "permanent title miss is served from negative cache",
+    );
+    assertEq(stub.requestUrlMock.calls.length, 1,
+      "negative cache prevents repeat title-miss requests",
+    );
+    assertEq(cache["omdb:tt0000005"]?.poster_url, "",
+      "negative cache stores an empty poster URL");
+
+    stub.resetRequestUrlMock(() => ({
+      status: 200,
+      json: { Response: "False", Error: "Incorrect IMDb ID." },
+      headers: {},
+    }));
+    assertEq(
+      await fetchOmdbPoster("tt0000006", "key", cache, missSession),
+      "",
+      "incorrect IMDb ID is treated as a permanent miss",
+    );
+    assertTrue(!!cache["omdb:tt0000006"],
+      "incorrect IMDb ID is negative-cached");
+  }
+
+  console.log("\n[40e] poster source policy keeps localization independent");
+  {
+    assertTrue(
+      shouldFetchTmdbMetadata("omdb", true, true, "zh-CN"),
+      "OMDb-only posters still fetch TMDB when localization needs it",
+    );
+    assertTrue(
+      !shouldFetchTmdbMetadata("omdb", true, true, ""),
+      "OMDb-only posters skip unnecessary TMDB calls without localization",
+    );
+    assertTrue(
+      !shouldFetchTmdbMetadata("auto", true, true, "", false),
+      "Daily-only enrichment skips TMDB poster-only calls",
+    );
+    assertTrue(
+      shouldFetchTmdbMetadata("auto", true, true, "zh-CN", false),
+      "Daily-only enrichment still fetches TMDB localization",
+    );
+    assertTrue(
+      shouldFetchTmdbMetadata("auto", true, true, ""),
+      "Auto mode asks TMDB for its primary poster",
+    );
+    assertTrue(
+      !shouldFetchOmdbPosterForItem("auto", "tmdb-poster", true, true),
+      "Auto mode does not call OMDb when TMDB supplied a poster",
+    );
+    assertTrue(
+      shouldFetchOmdbPosterForItem("auto", "", true, true),
+      "Auto mode falls back to OMDb when TMDB has no poster",
+    );
+    assertTrue(
+      shouldFetchOmdbPosterForItem("omdb", "tmdb-poster", true, true),
+      "OMDb-only mode ignores an available TMDB poster",
+    );
+    assertTrue(
+      !shouldFetchOmdbPosterForItem("tmdb", "", true, true),
+      "TMDB-only mode never calls OMDb",
+    );
+    assertTrue(
+      !shouldFetchOmdbPosterForItem("auto", "", true, false),
+      "OMDb lookup requires an IMDb id",
+    );
+  }
+
+  console.log("\n[40f] stale OMDb revalidation stays inside bounded concurrency");
+  {
+    const stub = await import("./stub-obsidian");
+    const ids = Array.from(
+      { length: 12 },
+      (_, index) => `tt${String(index + 10).padStart(7, "0")}`,
+    );
+    const cache: OmdbPosterCache = {};
+    for (const id of ids) {
+      cache[`omdb:${id}`] = {
+        cache_version: 1,
+        poster_url: `stale-${id}`,
+        cached_at: 0,
+        expires_at: 0,
+      };
+    }
+
+    let active = 0;
+    let maxActive = 0;
+    stub.resetRequestUrlMock(async (req) => {
+      active++;
+      maxActive = Math.max(maxActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      active--;
+      const imdbId = new URL(req.url).searchParams.get("i") ?? "";
+      return {
+        status: 200,
+        json: {
+          Response: "True",
+          imdbID: imdbId,
+          Poster: `fresh-${imdbId}`,
+        },
+        headers: {},
+      };
+    });
+
+    const session = createOmdbRequestSession();
+    const returned = new Array<string>(ids.length);
+    await processWithConcurrency(ids, 5, async (id, index) => {
+      returned[index] = await fetchOmdbPoster(id, "key", cache, session);
+    });
+
+    assertTrue(maxActive <= 5,
+      "stale revalidation never exceeds the caller's five-request pool");
+    assertTrue(maxActive > 1,
+      "stale revalidation still uses available concurrency");
+    assertEq(stub.requestUrlMock.calls.length, ids.length,
+      "each stale cache entry is revalidated once");
+    assertTrue(
+      returned.every((poster, index) => poster === `stale-${ids[index]}`),
+      "current sync keeps using stale poster URLs",
+    );
+    assertEq(cache[`omdb:${ids[0]}`]?.poster_url, `fresh-${ids[0]}`,
+      "refreshed poster is cached for later lookups");
   }
 
   // ── Test 41: spec 0004 legacy-folder migration notice ─────────────────
@@ -4605,6 +5086,19 @@ void (async () => {
       "runtime-data detector catches non-empty TMDB cache",
     );
     assertTrue(
+      syncedPayloadContainsRuntimeData({
+        omdbPosterCache: {
+          "omdb:tt0000001": {
+            cache_version: 1,
+            poster_url: "poster",
+            cached_at: 1,
+            expires_at: 2,
+          },
+        },
+      }),
+      "runtime-data detector catches non-empty OMDb poster cache",
+    );
+    assertTrue(
       syncedPayloadContainsRuntimeData({ historyState: runtimeHistory }),
       "runtime-data detector catches populated history aggregates",
     );
@@ -4660,6 +5154,14 @@ void (async () => {
           expires_at: 2,
         },
       },
+      omdbPosterCache: {
+        "omdb:tt0468569": {
+          cache_version: 1,
+          poster_url: "https://example.test/dark-knight.jpg",
+          cached_at: 1,
+          expires_at: 2,
+        },
+      },
       historyState: {
         ...EMPTY_HISTORY_STATE,
         byMovie: { 155: ["2026-05-01T01:00:00.000Z"] },
@@ -4701,6 +5203,14 @@ void (async () => {
           expires_at: 2,
         },
       },
+      omdbPosterCache: {
+        "omdb:tt0000001": {
+          cache_version: 1,
+          poster_url: "poster",
+          cached_at: 1,
+          expires_at: 2,
+        },
+      },
       historyState: {
         ...EMPTY_HISTORY_STATE,
         byMovie: { 1: ["2026-05-01T01:00:00.000Z"] },
@@ -4728,6 +5238,11 @@ void (async () => {
     await mutable.saveSettings();
     assertEq(saveDataCalls, 1, "changed synced setting writes data.json once");
     assertEq(savedPayload?.tmdbCache, {}, "saved data.json has empty tmdbCache placeholder");
+    assertEq(
+      savedPayload?.omdbPosterCache,
+      {},
+      "saved data.json has empty OMDb poster cache placeholder",
+    );
     assertEq(
       savedPayload?.historyState?.knownEventIds,
       [],
@@ -4832,6 +5347,8 @@ void (async () => {
       syncWatchedDetail: false,
       syncFavorites: false,
       syncRatings: false,
+      omdbApiKey: "omdb-key",
+      posterSource: "omdb",
     });
     const engine = new SyncEngine(
       new stub.App() as never,
@@ -4847,6 +5364,12 @@ void (async () => {
     );
     assertEq(result.status, "updated", "Daily-only data sync completes");
     assertEq(result.items.length, 1, "watchlist item is included in Daily snapshot");
+    assertTrue(
+      !stub.requestUrlMock.calls.some((call) =>
+        call.url.includes("omdbapi.com"),
+      ),
+      "Daily-only sync never spends OMDb poster quota",
+    );
     assertEq(
       result.items[0].watchlist_added_at,
       "2026-05-11T10:00:00.000Z",

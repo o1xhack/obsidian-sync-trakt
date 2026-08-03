@@ -120,24 +120,24 @@ Filtere nach `trakt_type = "movie"` / `"show"`, sortiere nach `trakt_year` / `tr
 ## 🚀 Schnellstart
 
 1. Einstellungen → Community plugins → **Durchsuchen** → suche nach **Sync Trakt** → **Installieren** → **Aktivieren**
-2. Einstellungen → **Sync Trakt** → trage deine Trakt + TMDB API-Schlüssel ein ([SETUP-Anleitung](../SETUP.md))
+2. Einstellungen → **Sync Trakt** → verbinde Trakt und füge optional TMDB-/OMDb-Schlüssel hinzu ([SETUP-Anleitung](../SETUP.md))
 3. Befehlspalette → **Sync Trakt: Sync**
 
 ## 🔑 API-Schlüssel: was jeder freischaltet
 
-Das Plugin verwendet zwei APIs. **Trakt ist Pflicht** — ohne sie kann das Plugin nichts synchronisieren. **TMDB ist optional**, schaltet aber das frei, weshalb die meisten Nutzer das Plugin überhaupt installieren. Hier die Aufschlüsselung:
+Das Plugin verbindet sich mit drei Diensten. **Trakt ist Pflicht** — ohne ihn kann das Plugin nichts synchronisieren. **TMDB ist optional** und liefert lokalisierte Metadaten sowie TMDB-Poster. **OMDb ist ebenfalls optional** und wird nur für Posterabfragen per IMDb-ID verwendet.
 
-| Funktion | Trakt API<br/>_(erforderlich)_ | TMDB API<br/>_(empfohlen)_ |
-|---|:---:|:---:|
-| Trakt-Bibliothek synchronisieren (watchlist, watched, favorites, ratings) | ✅ | — |
-| Episodengenaue Sehzeit-Stempel | ✅ | — |
-| Titel / Beschreibung / Tagline in deiner Sprache | ✅ einfach | ✅ höhere Qualität |
-| **Genres in deiner Sprache** | ❌ | ✅ |
-| **In Notizen eingebettete Poster-Bilder** | ❌ | ✅ |
+| Funktion | Trakt API<br/>_(erforderlich)_ | TMDB API<br/>_(optional)_ | OMDb API<br/>_(optional)_ |
+|---|:---:|:---:|:---:|
+| Trakt-Bibliothek synchronisieren (watchlist, watched, favorites, ratings) | ✅ | — | — |
+| Episodengenaue Sehzeit-Stempel | ✅ | — | — |
+| Titel / Beschreibung / Tagline in deiner Sprache | ✅ einfach | ✅ höhere Qualität | — |
+| **Genres in deiner Sprache** | ❌ | ✅ | — |
+| **In Notizen eingebettete Poster-Bilder** | ❌ | ✅ | ✅ |
 
-Wenn dir englische Inhalte ohne Poster reichen, lass TMDB leer — Trakt allein genügt. Für vollständige nicht-englische Lokalisierung (inkl. Genres und Poster) **trage einen TMDB-Schlüssel ein** ([kostenlose Anmeldung](https://www.themoviedb.org/settings/api)). Klicke nach dem Einfügen auf den **Test**-Button neben dem Eingabefeld, um zu prüfen, ob der Schlüssel funktioniert, bevor du die erste Synchronisation startest.
+Wenn dir englische Inhalte ohne Poster reichen, genügt Trakt allein. Verwende TMDB für lokalisierte Genres und TMDB-Poster oder OMDb als Poster-Fallback bzw. als Posterquelle ohne TMDB. Der kostenlose OMDb-Schlüssel ist auf 1.000 Anfragen pro Tag begrenzt; Daily-Notes-only-Sync verbraucht dieses Kontingent nicht. Prüfe jeden eingetragenen Schlüssel mit dem jeweiligen **Test**-Button.
 
-→ [Vollständige Anleitung für beide Schlüssel](../SETUP.md)
+→ [Vollständige Anleitung für alle Schlüssel](../SETUP.md)
 
 ## 📦 Installation
 
@@ -181,7 +181,7 @@ Dann kopiere `main.js`, `manifest.json`, `styles.css` nach `<vault>/.obsidian/pl
 
 | Dokument | Inhalt |
 |---|---|
-| [SETUP](../SETUP.md) | Erstellung der Trakt + TMDB API-Schlüssel, Erstkonfiguration, Fehlerbehebung (Englisch) |
+| [SETUP](../SETUP.md) | Trakt sowie optionale TMDB-/OMDb-Schlüssel, Erstkonfiguration, Fehlerbehebung (Englisch) |
 | [MANUAL](../MANUAL.md) | Vollständige Einstellungsreferenz, Frontmatter-Felder, Vorlagenvariablen (Englisch) |
 | [DEVELOPER](../DEVELOPER.md) | Architektur, Datenfluss, Erweiterungs­anleitung (nur Englisch) |
 | [docs/i18n/](.) | README-Übersetzungen in 8 weiteren Sprachen |

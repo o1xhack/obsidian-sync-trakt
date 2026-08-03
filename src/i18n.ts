@@ -366,18 +366,18 @@ export const STRINGS = {
     "zh-CN": "多设备同步",
   },
   "auth.sync.desc": {
-    en: "Auth state (Trakt tokens, TMDB key, all settings) is stored in this vault's plugin data folder and follows your vault sync. To share auth between Mac and mobile: enable 'Plugin data' in Obsidian Sync, or use any vault sync layer (Syncthing, iCloud + Advanced Data Protection, Cryptomator). The plugin doesn't store anything on a server.",
+    en: "Auth state (Trakt tokens, TMDB / OMDb keys, all settings) is stored in this vault's plugin data folder and follows your vault sync. To share auth between Mac and mobile: enable 'Plugin data' in Obsidian Sync, or use any vault sync layer (Syncthing, iCloud + Advanced Data Protection, Cryptomator). The plugin doesn't store anything on a server.",
     "zh-CN":
-      "授权状态（Trakt token、TMDB key、所有设置）保存在本 vault 的插件数据文件夹，跟随 vault 同步。要在 Mac 和手机间共享授权：在 Obsidian Sync 设置里勾选「Plugin data」，或使用 Syncthing、iCloud（开启 Advanced Data Protection）、Cryptomator 等任何 vault 同步层。本插件不在任何服务器存储数据。",
+      "授权状态（Trakt token、TMDB / OMDb key、所有设置）保存在本 vault 的插件数据文件夹，跟随 vault 同步。要在 Mac 和手机间共享授权：在 Obsidian Sync 设置里勾选「Plugin data」，或使用 Syncthing、iCloud（开启 Advanced Data Protection）、Cryptomator 等任何 vault 同步层。本插件不在任何服务器存储数据。",
   },
 
   // ── TMDB section ──
   "tmdb.heading": { en: "TMDB", "zh-CN": "TMDB" },
   "tmdb.apiKey.name": { en: "API key", "zh-CN": "API 密钥" },
   "tmdb.apiKey.desc": {
-    en: "Recommended. Powers poster images AND complete metadata translation — including genres — in your chosen language. Without a key, posters are skipped and translations fall back to Trakt (covers title / overview / tagline; genres stay English). Get a free key at themoviedb.org/settings/api.",
+    en: "Recommended. Powers complete metadata translation — including genres — and can provide posters in Auto or TMDB mode. Without a key, translations fall back to Trakt; posters can still use OMDb when configured. Get a free key at themoviedb.org/settings/api.",
     "zh-CN":
-      "推荐填写。海报图片和**完整的元数据翻译（含 genres）**都依赖它。不填的话海报会跳过，翻译会回退到 Trakt（覆盖 title / overview / tagline，但 genres 留英文）。在 themoviedb.org/settings/api 免费获取。",
+      "推荐填写。它提供**完整的元数据翻译（含 genres）**，并可在 Auto 或 TMDB 模式下提供海报。不填时翻译会回退到 Trakt；配置了 OMDb 后仍可获取海报。在 themoviedb.org/settings/api 免费获取。",
   },
   "tmdb.apiKey.placeholder": {
     en: "Paste your API key",
@@ -413,14 +413,26 @@ export const STRINGS = {
   },
   // [0.3.2] Inline warning shown under Metadata language when set without TMDB key
   "loc.noTmdbWarning": {
-    en: "⚠ No TMDB key set. Translation will fall back to Trakt — title / overview / tagline only; genres stay English and posters are skipped. Add a TMDB key above for full localization.",
+    en: "⚠ No TMDB key set. Translation will fall back to Trakt — title / overview / tagline only; genres stay English. Poster behavior follows the selected source and configured OMDb key. Add a TMDB key above for full localization.",
     "zh-CN":
-      "⚠ 未设置 TMDB key。翻译会回退到 Trakt —— 仅覆盖 title / overview / tagline；genres 留英文、海报跳过。要获得完整本地化，请在上方填入 TMDB key。",
+      "⚠ 未设置 TMDB key。翻译会回退到 Trakt —— 仅覆盖 title / overview / tagline，genres 留英文。海报会按照所选来源和已配置的 OMDb key 处理。要获得完整本地化，请在上方填入 TMDB key。",
   },
+  "poster.source.name": { en: "Poster source", "zh-CN": "海报来源" },
+  "poster.source.desc": {
+    en: "Auto uses TMDB first, then falls back to OMDb when TMDB is unavailable or has no poster. TMDB and OMDb modes use only the selected provider. Metadata translation remains independent.",
+    "zh-CN":
+      "Auto 会先使用 TMDB，在 TMDB 不可用或没有海报时回退到 OMDb。TMDB 和 OMDb 模式只使用指定来源；元数据翻译不受影响。",
+  },
+  "poster.source.auto": {
+    en: "Auto (TMDB → OMDb)",
+    "zh-CN": "自动（TMDB → OMDb）",
+  },
+  "poster.source.tmdb": { en: "TMDB only", "zh-CN": "仅 TMDB" },
+  "poster.source.omdb": { en: "OMDb only", "zh-CN": "仅 OMDb" },
   "tmdb.posterSize.name": { en: "Poster size", "zh-CN": "海报尺寸" },
   "tmdb.posterSize.desc": {
-    en: "Image size for posters embedded in notes.",
-    "zh-CN": "嵌入笔记的海报图片尺寸。",
+    en: "TMDB image size for posters embedded in notes. OMDb controls its own image resolution.",
+    "zh-CN": "嵌入笔记的 TMDB 海报尺寸。OMDb 图片分辨率由 OMDb 决定。",
   },
 
   // [0.2.0] TMDB cache controls
@@ -461,6 +473,69 @@ export const STRINGS = {
   "tmdb.cache.clear.notice": {
     en: "Sync Trakt: TMDB cache cleared.",
     "zh-CN": "Sync Trakt：TMDB 缓存已清空。",
+  },
+
+  // ── OMDb poster fallback ──
+  "omdb.heading": { en: "OMDb poster fallback", "zh-CN": "OMDb 海报回退" },
+  "omdb.apiKey.name": { en: "OMDb API key", "zh-CN": "OMDb API 密钥" },
+  "omdb.apiKey.desc": {
+    en: "Optional poster-only provider. Free keys allow 1,000 requests per day; the dedicated high-resolution Poster API requires Patreon. Regular poster results may be lower resolution or missing. Lookups require an IMDb ID. OMDb content is CC BY-NC 4.0. Get a key at omdbapi.com/apikey.aspx.",
+    "zh-CN":
+      "可选的纯海报来源。免费 key 每日限 1,000 次请求；独立的高分辨率 Poster API 需要 Patreon。普通海报可能分辨率较低或缺失，查询还必须有 IMDb ID。OMDb 内容采用 CC BY-NC 4.0。在 omdbapi.com/apikey.aspx 获取 key。",
+  },
+  "omdb.apiKey.placeholder": {
+    en: "Paste your OMDb API key",
+    "zh-CN": "粘贴你的 OMDb API 密钥",
+  },
+  "omdb.apiKey.test.name": {
+    en: "Test OMDb API key",
+    "zh-CN": "测试 OMDb API 密钥",
+  },
+  "omdb.apiKey.test.desc": {
+    en: "Verify the key with one known-title request. This counts toward the OMDb daily request limit.",
+    "zh-CN": "使用一个已知影片请求验证 key；这会计入 OMDb 每日请求限额。",
+  },
+  "omdb.apiKey.test.button": { en: "Test", "zh-CN": "测试" },
+  "omdb.apiKey.test.testing": { en: "Testing…", "zh-CN": "测试中…" },
+  "omdb.apiKey.test.ok": {
+    en: "✓ Connected — your OMDb key works.",
+    "zh-CN": "✓ 连接成功 —— OMDb key 有效。",
+  },
+  "omdb.apiKey.test.empty": {
+    en: "Enter an OMDb key above first.",
+    "zh-CN": "请先在上方填入 OMDb key。",
+  },
+  "omdb.apiKey.test.unauthorized": {
+    en: "✗ Invalid key. OMDb rejected the request.",
+    "zh-CN": "✗ 无效 key。OMDb 拒绝了请求。",
+  },
+  "omdb.apiKey.test.limit": {
+    en: "✗ OMDb daily request limit reached.",
+    "zh-CN": "✗ 已达到 OMDb 每日请求限额。",
+  },
+  "omdb.apiKey.test.network": {
+    en: "✗ Couldn't reach OMDb or the test title was unavailable.",
+    "zh-CN": "✗ 无法连接 OMDb，或测试影片暂时不可用。",
+  },
+  "omdb.cache.entries": {
+    en: "Currently cached: {count} posters",
+    "zh-CN": "当前缓存：{count} 张海报",
+  },
+  "omdb.cache.clear.name": {
+    en: "Clear OMDb poster cache",
+    "zh-CN": "清空 OMDb 海报缓存",
+  },
+  "omdb.cache.clear.desc": {
+    en: "Drops locally cached OMDb poster URLs. Successful results, including titles with no poster, are cached for 90 days to protect the daily limit.",
+    "zh-CN": "清空本机缓存的 OMDb 海报地址。成功结果（包括没有海报的条目）会缓存 90 天，以避免消耗每日限额。",
+  },
+  "omdb.cache.clear.button": {
+    en: "Clear cache",
+    "zh-CN": "清空缓存",
+  },
+  "omdb.cache.clear.notice": {
+    en: "Sync Trakt: OMDb poster cache cleared.",
+    "zh-CN": "Sync Trakt：OMDb 海报缓存已清空。",
   },
 
   // ── Localization section ──
@@ -878,9 +953,9 @@ export const STRINGS = {
     "zh-CN": "断开 Trakt 账号？",
   },
   "confirm.disconnect.body": {
-    en: "This removes the saved Trakt access and refresh tokens from this plugin.\nYour synced notes, settings, TMDB cache, and history state stay in place.\nSync will stop until you connect the account again.",
+    en: "This removes the saved Trakt access and refresh tokens from this plugin.\nYour synced notes, settings, TMDB / OMDb caches, and history state stay in place.\nSync will stop until you connect the account again.",
     "zh-CN":
-      "这会移除插件里保存的 Trakt access token 和 refresh token。\n已经同步的笔记、设置、TMDB 缓存和历史状态都会保留。\n重新连接账号之前，插件无法继续同步 Trakt。",
+      "这会移除插件里保存的 Trakt access token 和 refresh token。\n已经同步的笔记、设置、TMDB / OMDb 缓存和历史状态都会保留。\n重新连接账号之前，插件无法继续同步 Trakt。",
   },
   "confirm.disconnect.confirm": {
     en: "Disconnect",
@@ -896,6 +971,19 @@ export const STRINGS = {
       "这会清空本机缓存的 TMDB 元数据，包括海报地址、翻译标题、简介、tagline 和类型。\n已有笔记不会立刻被删除或修改。下次同步可能会重新从 TMDB 拉取元数据。\n这些 runtime 缓存位于本机设备存储，不在同步的 data.json 里；清空它不会减少 Obsidian Sync 的历史占用。",
   },
   "confirm.clearTmdb.confirm": {
+    en: "Clear cache",
+    "zh-CN": "清空缓存",
+  },
+  "confirm.clearOmdb.title": {
+    en: "Clear OMDb poster cache?",
+    "zh-CN": "清空 OMDb 海报缓存？",
+  },
+  "confirm.clearOmdb.body": {
+    en: "This clears cached OMDb poster URLs from local device storage.\nNotes are not edited immediately. The next sync may request posters again and count against OMDb's daily limit.\nThe cache is local to this device and is not stored in synced data.json.",
+    "zh-CN":
+      "这会清空本机存储的 OMDb 海报地址缓存。\n已有笔记不会立刻修改。下次同步可能重新请求海报，并计入 OMDb 每日限额。\n这些缓存仅保存在本机，不会写入同步的 data.json。",
+  },
+  "confirm.clearOmdb.confirm": {
     en: "Clear cache",
     "zh-CN": "清空缓存",
   },
@@ -917,9 +1005,9 @@ export const STRINGS = {
     "zh-CN": "去重同步笔记？",
   },
   "confirm.dedupe.body": {
-    en: "This scans the current sync folder and groups notes by trakt_type + trakt_id.\nFor each duplicate group, the note that best matches your current filename template is kept, and the other copies are moved to Obsidian trash.\nNo Trakt or TMDB API calls are made.",
+    en: "This scans the current sync folder and groups notes by trakt_type + trakt_id.\nFor each duplicate group, the note that best matches your current filename template is kept, and the other copies are moved to Obsidian trash.\nNo Trakt, TMDB, or OMDb API calls are made.",
     "zh-CN":
-      "这会扫描当前同步文件夹，并按 trakt_type + trakt_id 分组。\n每组重复项会保留最符合当前文件名模板的一篇，其余副本会移入 Obsidian 回收站。\n这个操作不会调用 Trakt 或 TMDB API。",
+      "这会扫描当前同步文件夹，并按 trakt_type + trakt_id 分组。\n每组重复项会保留最符合当前文件名模板的一篇，其余副本会移入 Obsidian 回收站。\n这个操作不会调用 Trakt、TMDB 或 OMDb API。",
   },
   "confirm.dedupe.confirm": {
     en: "Deduplicate",
@@ -965,6 +1053,10 @@ export const STRINGS = {
   "cmd.clearTmdbCache": {
     en: "Clear TMDB metadata cache",
     "zh-CN": "清空 TMDB 元数据缓存",
+  },
+  "cmd.clearOmdbCache": {
+    en: "Clear OMDb poster cache",
+    "zh-CN": "清空 OMDb 海报缓存",
   },
 
   // ── Notices ──

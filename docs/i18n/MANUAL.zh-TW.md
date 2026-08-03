@@ -24,7 +24,7 @@
 手動安裝：
 
 1. 從 [最新 release](https://github.com/o1xhack/obsidian-sync-trakt/releases/latest) 下載 `main.js`、`manifest.json`、`styles.css`
-2. 在你的 vault 裡建立資料夾 `.obsidian/plugins/obsidian-sync-trakt/`
+2. 在你的 vault 裡建立資料夾 `.obsidian/plugins/sync-trakt/`
 3. 把三個檔案複製進去
 4. 開啟 Obsidian → 設定 → 第三方外掛 → 啟用 **Sync Trakt**
 
@@ -41,15 +41,17 @@
 3. **Redirect URIs** 填 `urn:ietf:wg:oauth:2.0:oob`
 4. 點 **Create**。複製 **Client ID** 和 **Client Secret**
 
-### 3b.（選填）申請 TMDB API key
+### 3b.（選填）設定元數據與海報服務
 
-海報圖片從 [The Movie Database](https://themoviedb.org) 拉取。免費 API key 即可。不申請的話筆記不帶海報。
+TMDB 提供本地化元數據和首選海報來源。未設定 TMDB 時，本地化會回退到
+Trakt；選填的 OMDb key 仍可依 IMDb ID 提供海報。
 
 1. 在 themoviedb.org 註冊帳號
 2. **Settings → API → Create → Developer**
 3. 複製 **API Key (v3 auth)**
 
-完整的申請流程見 [SETUP.zh-TW.md](SETUP.zh-TW.md)。
+TMDB 的完整申請流程和 OMDb 免費 key 啟用步驟見
+[SETUP.zh-TW.md](SETUP.zh-TW.md)。
 
 ---
 
@@ -78,14 +80,19 @@
 | Trakt Client Secret | 來自同一個應用頁面。 |
 | Connection status | 顯示目前狀態；提供連線或斷開按鈕。 |
 
-### TMDB（海報圖片）
+### 元數據與海報服務
 
 | 設定項 | 預設值 | 說明 |
 |---|---|---|
-| TMDB API key | _(空)_ | 選填。留空則跳過海報圖片。 |
-| Poster size | `w500` | 從 TMDB 拉取的圖片寬度變體。可選：w92、w154、w185、w342、w500、w780、original。 |
+| TMDB API key | _(空)_ | 建議用於完整的元數據本地化和 TMDB 海報。未填寫時，本地化回退到 Trakt；設定 OMDb 後仍可取得海報。 |
+| Poster source | `Auto (TMDB → OMDb)` | `Auto` 優先使用 TMDB，TMDB 沒有海報時回退到 OMDb。`TMDB only` 和 `OMDb only` 只使用指定服務取得海報。翻譯來源與此設定相互獨立。 |
+| Poster size | `w500` | 從 TMDB 拉取的圖片寬度變體。OMDb 的圖片解析度由 OMDb 決定。可選：w92、w154、w185、w342、w500、w780、original。 |
 | TMDB cache TTL | `90 天` | 快取的 TMDB 元數據多久之後會被重新驗證。**永不過期**則保持快取不變（只能手動清空）。過期條目會立即返回舊值並在背景非同步刷新，同步永遠不會被阻塞。每條目附加 ±5 天隨機抖動，1000+ 條目不會同一天集體過期。詳見 [spec 0001](../specs/0001-incremental-sync.md) §A。 |
-| Clear cache | _(按鈕)_ | 丟棄所有已快取的元數據。下次同步會從 TMDB 重新拉取全部條目（大庫可能需要幾分鐘）。設定項的描述裡會顯示當前快取的條目數。 |
+| Clear cache | _(按鈕)_ | 丟棄所有已快取的 TMDB 元數據。下次同步會從 TMDB 重新拉取全部條目（大庫可能需要幾分鐘）。設定項的描述裡會顯示當前快取的條目數。 |
+| OMDb API key | _(空)_ | 選填的海報專用回退。免費 key 每天最多 1,000 次請求。專用高解析度 Poster API 僅供 Patreon 使用者使用；一般結果的解析度可能較低，也可能沒有圖片。查詢必須有 IMDb ID。 |
+| Clear OMDb cache | _(按鈕)_ | 清空按服務區分的本地海報快取。成功查詢（包括已知沒有海報的結果）會快取 90 天。 |
+
+OMDb 內容按 [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) 發布。Sync Trakt 只儲存一般標題資料回應中的海報 URL，不使用 Patreon 專屬的高解析度 Poster API。
 
 ### Localization
 
@@ -98,7 +105,7 @@
 
 啟用本地化後，同步按以下順序解析翻譯：
 
-1. **TMDB**（首選）—— 一次合併請求拿回本地化的 `title` / `overview` / `tagline` / `genres` 加上海報 URL。需要 TMDB API key。
+1. **TMDB**（首選）—— 一次合併請求拿回本地化的 `title` / `overview` / `tagline` / `genres`。需要 TMDB API key；海報來源透過 **Poster source** 獨立選擇。
 2. **Trakt `/translations/{lang}`**（回退）—— 沒填 TMDB API key 時使用。只覆蓋 `title` / `overview` / `tagline`，`genres` 保持英文。
 3. **英文原文** —— 兩個 API 都沒有翻譯時按欄位回退。
 
@@ -185,7 +192,8 @@ Tag notes 是你筆記之間相互連結的主題檔案，建構關係圖譜。*
 
 ### Reset
 
-**Reset to defaults** 把所有設定恢復為預設值。認證憑證和 TMDB API key 會保留。
+**Reset to defaults** 把所有設定恢復為預設值。認證憑證以及 TMDB / OMDb
+API key 會保留。
 
 ---
 
@@ -231,7 +239,7 @@ Tag notes 是你筆記之間相互連結的主題檔案，建構關係圖譜。*
 | `trakt_rated_at` | string | 評分的 ISO 時間戳。 |
 | `trakt_url` | string | Trakt 頁面 URL。 |
 | `trakt_imdb_url` | string | IMDB 頁面 URL。 |
-| `trakt_poster_url` | string | TMDB 海報圖片 URL。 |
+| `trakt_poster_url` | string | 由所選服務回傳的海報圖片 URL。 |
 | `trakt_synced_at` | string | 同步最近一次**真正修改這條筆記**的 ISO 時間戳。0.3.0 起只在筆記內容實際有變化時才更新 —— 不是每次 sync 都刷新。可作為 Bases / Dataview「最近變更」視圖的排序鍵。 |
 | `trakt_community_stats_synced_at` | string | Smart 模式最近一次真正寫入 `trakt_rating` / `trakt_votes` 的 ISO 時間戳。已有筆記可能要等到社群統計下一次被允許更新時才出現。 |
 | `trakt_tag_notes` | list | tag note 檔案的 wikilink（"Add tag notes to frontmatter" 開啟時）。 |
@@ -361,12 +369,18 @@ Tag notes 是你筆記之間相互連結的主題檔案，建構關係圖譜。*
 - **Daily Notes-only 定時**：啟用 **Daily Notes → Auto-update Daily Notes without media-note sync**，可以只更新 Daily Notes，不寫媒體筆記
 - **強制全量歷史刷新**：命令 **Traktr: Force full watch-history refresh** —— 跳過週期間隔，立刻重新拉取整個 Trakt 歷史。當你剛在 Trakt 上刪了一個錯誤的 scrobble、想立刻讓外掛檢測到，可以用這個
 - **清空 TMDB 快取**：命令 **Traktr: Clear TMDB metadata cache** —— 清空所有已快取的 TMDB 條目。下次同步會從 TMDB 重新拉取所有元數據。和 Settings → TMDB → **Clear cache** 按鈕等效
+- **清空 OMDb 快取**：命令 **Traktr: Clear OMDb poster cache** —— 清空本機的
+  海報專用快取。下一次完整媒體同步可能重新請求這些海報，並計入 OMDb
+  每日限額
 
 ### 同步為什麼這麼快（0.2.0+）
 
 第一次同步把本地快取填好之後，後續同步的 API 呼叫數只取決於真正變了的內容：
 
-- **TMDB 元數據快取**跨同步、跨裝置保留。一部電影的標題 / 海報 / 簡介只拉一次，之後一直複用，直到 TTL 過期或你手動 Clear。**典型同步 ~5-10 次 TMDB 呼叫，而不是 ~1200 次**
+- **TMDB 元數據快取**會在每台裝置的本機 runtime storage 中跨同步保留。
+  一部電影的標題 / 海報 / 簡介會重複使用到 TTL 到期或你手動清空快取為止
+- **OMDb 海報快取**與 TMDB 分開，且只保存在本機。成功結果（包括已知
+  沒有海報的項目）會重複使用 90 天；Daily Notes-only 同步從不請求海報
 - **Trakt 歷史增量拉取**用 `?start_at=<上次同步時間>`。一週的新觀看通常一頁就夠（1 次 API 呼叫）。每隔 `History full-refresh interval (days)` 週期做一次全量重拉以檢測刪除
 
 完整設計原理見 [`specs/0001-incremental-sync.md`](../specs/0001-incremental-sync.md)。

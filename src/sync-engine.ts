@@ -1,5 +1,5 @@
 import { App, Notice, TFile, TFolder, normalizePath } from "obsidian";
-import type { TraktrSettings } from "./settings";
+import type { PosterSource, TraktrSettings } from "./settings";
 import {
   getEffectiveMetadataLanguage,
   getEffectiveMetadataFallbackLanguage,
@@ -30,6 +30,7 @@ import {
   pickTraktTranslation,
 } from "./trakt-api";
 import { fetchMovieMetadata, fetchTvMetadata } from "./tmdb-api";
+import { createOmdbRequestSession, fetchOmdbPoster } from "./omdb-api";
 import { ensureValidToken } from "./trakt-auth";
 import {
   renderNote,
@@ -55,24 +56,39 @@ import {
 } from "./history-state";
 
 /**
- * Cap on simultaneous TMDB requests during a sync. Keeps the user's CPU /
- * network unloaded, gives the status bar room to update mid-sync, and
- * sidesteps TMDB's rate limit (50 req/s) — a `Promise.all` burst over 1000+
- * items can saturate the bucket and trigger 429s, which we silently swallow
- * as "no poster".
+ * Cap on simultaneous metadata/poster requests during a sync. Keeps the
+ * user's CPU/network unloaded, gives the status bar room to update mid-sync,
+ * and avoids request bursts against TMDB or OMDb.
  */
 const TMDB_CONCURRENCY = 5;
-
-/**
- * Cap on simultaneous Trakt /translations fallback calls (only used when no
- * TMDB API key is configured). Trakt allows 1000 req / 5min, so 5 in flight
- * is comfortably below the limit.
- */
-const TRAKT_TRANSLATION_CONCURRENCY = 5;
 
 /** Give Obsidian's UI, metadata index, and vault-sync queue breathing room
  * during large initial imports or rebuilds. */
 const NOTE_WRITE_BATCH_SIZE = 25;
+
+export function shouldFetchTmdbMetadata(
+  posterSource: PosterSource,
+  hasTmdbKey: boolean,
+  hasTmdbId: boolean,
+  metadataLanguage: string,
+  fetchPosters = true,
+): boolean {
+  return (
+    hasTmdbKey &&
+    hasTmdbId &&
+    (!!metadataLanguage || (fetchPosters && posterSource !== "omdb"))
+  );
+}
+
+export function shouldFetchOmdbPosterForItem(
+  posterSource: PosterSource,
+  tmdbPoster: string,
+  hasOmdbKey: boolean,
+  hasImdbId: boolean,
+): boolean {
+  if (!hasOmdbKey || !hasImdbId || posterSource === "tmdb") return false;
+  return posterSource === "omdb" || !tmdbPoster;
+}
 
 /**
  * [0.9.0] Extract the base language code from a BCP-47 string. `zh-CN` → `zh`,
@@ -1049,7 +1065,7 @@ export class SyncEngine {
 
       applyHistoryStateToItems(this.settings.historyState, merged.values());
       const items = [...merged.values()];
-      await this.enrichMetadata(items, onProgress);
+      await this.enrichMetadata(items, onProgress, { fetchPosters: false });
       await this.saveSettings();
 
       return { status: "updated", items };
@@ -1366,51 +1382,86 @@ export class SyncEngine {
   private async enrichMetadata(
     itemList: NormalizedItem[],
     onProgress?: SyncProgress,
+    options: { fetchPosters?: boolean } = {},
   ): Promise<void> {
     const t = getTranslator(this.settings.uiLanguage);
     const language = getEffectiveMetadataLanguage(this.settings);
     const fallbackLanguage = getEffectiveMetadataFallbackLanguage(this.settings);
-    if (this.settings.tmdbApiKey) {
+    const fetchPosters = options.fetchPosters ?? true;
+    const hasTmdbKey = !!this.settings.tmdbApiKey.trim();
+    const hasOmdbKey = fetchPosters && !!this.settings.omdbApiKey.trim();
+    const omdbSession = createOmdbRequestSession();
+    if (language || (fetchPosters && (hasTmdbKey || hasOmdbKey))) {
       await processWithConcurrency(
         itemList,
         TMDB_CONCURRENCY,
         async (item) => {
-          if (!item.ids.tmdb) {
-            if (language) {
-              await this.applyTraktTranslation(
-                item,
-                language,
-                fallbackLanguage,
-              );
+          const tmdbId = item.ids.tmdb;
+          const needsTmdb = shouldFetchTmdbMetadata(
+            this.settings.posterSource,
+            hasTmdbKey,
+            !!tmdbId,
+            language,
+            fetchPosters,
+          );
+          let tmdbPoster = "";
+
+          if (needsTmdb && tmdbId) {
+            const fetcher =
+              item.type === "movie" ? fetchMovieMetadata : fetchTvMetadata;
+            const needsTmdbPoster =
+              fetchPosters && this.settings.posterSource !== "omdb";
+            const meta = await fetcher(
+              tmdbId,
+              this.settings.tmdbApiKey,
+              this.settings.posterSize,
+              language,
+              this.settings.tmdbCache,
+              this.settings.tmdbCacheTtlDays,
+              fallbackLanguage,
+              needsTmdbPoster,
+            );
+            tmdbPoster = meta.poster_url;
+            if (meta.translation) {
+              applyTranslation(item, meta.translation);
             }
+          } else if (language && (!hasTmdbKey || !item.ids.tmdb)) {
+            await this.applyTraktTranslation(
+              item,
+              language,
+              fallbackLanguage,
+            );
+          }
+
+          if (!fetchPosters) return;
+
+          if (this.settings.posterSource === "tmdb") {
+            item.poster_url = tmdbPoster;
             return;
           }
-          const fetcher =
-            item.type === "movie" ? fetchMovieMetadata : fetchTvMetadata;
-          const meta = await fetcher(
-            item.ids.tmdb,
-            this.settings.tmdbApiKey,
-            this.settings.posterSize,
-            language,
-            this.settings.tmdbCache,
-            this.settings.tmdbCacheTtlDays,
-            fallbackLanguage,
-          );
-          item.poster_url = meta.poster_url;
-          if (meta.translation) {
-            applyTranslation(item, meta.translation);
+
+          if (this.settings.posterSource === "auto" && tmdbPoster) {
+            item.poster_url = tmdbPoster;
+            return;
           }
+
+          item.poster_url =
+            shouldFetchOmdbPosterForItem(
+              this.settings.posterSource,
+              tmdbPoster,
+              hasOmdbKey,
+              !!item.ids.imdb,
+            ) && item.ids.imdb
+              ? await fetchOmdbPoster(
+                  item.ids.imdb,
+                  this.settings.omdbApiKey,
+                  this.settings.omdbPosterCache,
+                  omdbSession,
+                )
+              : "";
         },
         (done, total) =>
           onProgress?.(t("progress.fetchingMetadata", { done, total })),
-      );
-    } else if (language) {
-      await processWithConcurrency(
-        itemList,
-        TRAKT_TRANSLATION_CONCURRENCY,
-        (item) => this.applyTraktTranslation(item, language, fallbackLanguage),
-        (done, total) =>
-          onProgress?.(t("progress.fetchingTranslations", { done, total })),
       );
     }
   }

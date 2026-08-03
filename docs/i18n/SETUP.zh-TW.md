@@ -2,7 +2,7 @@
 
 > 🌐 [English](../SETUP.md) · [简体中文](SETUP.zh-CN.md) · **繁體中文** · [日本語](SETUP.ja.md)
 
-把 Sync Trakt 接入你帳號的完整流程：建立 Trakt OAuth 應用、申請 TMDB API key、設定外掛、跑第一次同步。
+把 Sync Trakt 接入你帳號的完整流程：建立 Trakt OAuth 應用、申請選填的 TMDB / OMDb API key、設定外掛、跑第一次同步。
 
 ## 1. Trakt — 建立 OAuth 應用
 
@@ -20,7 +20,7 @@
 
 ## 2. TMDB — 申請 v3 API key
 
-**海報圖片必需**，**元數據本地化強烈推薦**。沒填 TMDB key 時外掛還能透過 Trakt 翻譯端點本地化，但覆蓋更窄（不包括 genres 翻譯）。
+建議用於 **TMDB 海報圖片**和完整的**元數據本地化**。沒填 TMDB key 時外掛還能透過 Trakt 翻譯端點本地化；設定 OMDb key 後也可以取得海報。
 
 1. 在 <https://www.themoviedb.org/signup> 註冊（免費）
 2. **驗證信箱** —— 沒驗證的話申請 API key 那步過不去，檢查收件匣 / 垃圾郵件
@@ -36,6 +36,16 @@
 
 之後可以在 <https://www.themoviedb.org/settings/api> 隨時查看 v3 key。
 
+## 2b. OMDb —— 選填的海報回退
+
+如果你想在沒有 TMDB key 時取得海報，或補充 TMDB 沒有圖片的項目，可以加入 OMDb。
+
+1. 開啟 <https://www.omdbapi.com/apikey.aspx>
+2. 選擇 **FREE!**，填寫信箱、姓名和簡短的個人用途說明
+3. 在 OMDb 寄來的信件中啟用 key
+
+免費 key 每天最多 1,000 次請求。專用高解析度 Poster API 僅供 Patreon 使用者使用，因此 Sync Trakt 使用一般標題資料 API 傳回的圖片；解析度和圖片可用性因項目而異。查詢必須有 Trakt 提供的 IMDb ID。成功查詢（包括已知沒有海報的結果）會快取 90 天。OMDb 內容按 [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) 發布。
+
 ## 3. 設定外掛
 
 裝好外掛後（見 [README → Install](README.zh-TW.md#-安裝)），開啟 **設定 → Sync Trakt**。
@@ -47,28 +57,29 @@
 3. 在瀏覽器裡開啟連結、登入 Trakt、貼上使用者碼、點 **Continue**
 4. 彈窗自動關閉；**Connection status** 變成 **Traktr connected**
 
-### TMDB
+### 元數據與海報
 
 5. 把第 2 步拿到的 **API key (v3 auth)** 貼上
-6. 選 **Poster size** —— `w500` 是個不錯的預設值
+6. 選填：貼上第 2b 步拿到的 **OMDb API key**
+7. 選 **Poster source** —— 一般保持 `Auto (TMDB → OMDb)`；**Poster size** 用 `w500` 即可
 
 ### Localization（選填）
 
-7. **Metadata language** —— 選預設（比如 `Chinese (Traditional, Taiwan)` 對應 `zh-TW`）或選 **Custom** 輸入任意 BCP 47 代碼。保持 `Default` 就一切英文
-8. **Plugin UI language** —— `English` 或 `简体中文`。影響設定面板、命令面板、提示彈窗
-9. **Note template language** —— 選預設筆記範本的語言。如果你目前範本沒改過，切換此選項會自動改寫範本
+8. **Metadata language** —— 選預設（比如 `Chinese (Traditional, Taiwan)` 對應 `zh-TW`）或選 **Custom** 輸入任意 BCP 47 代碼。保持 `Default` 就一切英文
+9. **Plugin UI language** —— `English` 或 `简体中文`。影響設定面板、命令面板、提示彈窗
+10. **Note template language** —— 選預設筆記範本的語言。如果你目前範本沒改過，切換此選項會自動改寫範本
 
 ### Sync sources —— 選要同步的來源
 
-10. **Sync watchlist** —— 你想看的內容（預設 ON）
-11. **Sync favorites** —— 你標記為收藏的內容（預設 ON）
-12. **Sync watch history** —— 你看過的內容，帶播放次數和最近觀看時間（預設 OFF；資料量可能大）
-13. **Sync watch history (detailed)** —— 透過 `{{watch_history}}` 在筆記正文裡加每集（或每部電影）觀看時間戳。**只在 Sync watch history 開啟時顯示**。（預設 OFF；對大庫使用者顯著變慢 —— Trakt 的 `/sync/history` 端點每頁 100 條觀看事件）
-14. **Sync ratings** —— 你打過 1-10 分的內容（預設 OFF）
+11. **Sync watchlist** —— 你想看的內容（預設 ON）
+12. **Sync favorites** —— 你標記為收藏的內容（預設 ON）
+13. **Sync watch history** —— 你看過的內容，帶播放次數和最近觀看時間（預設 OFF；資料量可能大）
+14. **Sync watch history (detailed)** —— 透過 `{{watch_history}}` 在筆記正文裡加每集（或每部電影）觀看時間戳。**只在 Sync watch history 開啟時顯示**。（預設 OFF；對大庫使用者顯著變慢 —— Trakt 的 `/sync/history` 端點每頁 100 條觀看事件）
+15. **Sync ratings** —— 你打過 1-10 分的內容（預設 OFF）
 
 ### 跑第一次同步
 
-15. 命令面板（Ctrl/Cmd+P）→ **Traktr: Sync**
+16. 命令面板（Ctrl/Cmd+P）→ **Traktr: Sync**
 
 第一次測試建議**只勾 Sync watchlist** —— 多數人 watchlist < 100 條，跑得快。
 
@@ -102,5 +113,6 @@
 |---|---|
 | Trakt client ID + secret | [Trakt API Applications](https://app.trakt.tv/settings/apps/api) → 點你的應用 |
 | TMDB API key (v3 auth) | <https://www.themoviedb.org/settings/api> |
+| OMDb API key | OMDb 啟用郵件；需要重新申請時開啟 <https://www.omdbapi.com/apikey.aspx> |
 
 Trakt access token 自動更新，你不用管。TMDB API key 不會過期。

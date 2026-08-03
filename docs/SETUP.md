@@ -3,8 +3,8 @@
 > 🌐 **English** · [简体中文](i18n/SETUP.zh-CN.md) · [繁體中文](i18n/SETUP.zh-TW.md) · [日本語](i18n/SETUP.ja.md)
 
 Walk-through for getting Sync Trakt connected: creating a Trakt
-OAuth application, getting a TMDB API key, configuring the plugin, and
-running your first sync.
+OAuth application, getting optional TMDB and OMDb API keys, configuring the
+plugin, and running your first sync.
 
 ## 1. Trakt — create an OAuth application
 
@@ -27,9 +27,9 @@ your app to view them again.
 
 ## 2. TMDB — get a v3 API key
 
-Required for **poster images** and strongly recommended for **metadata
-localization**. Without a TMDB key, the plugin can still localize via Trakt's
-translation endpoint, but coverage is narrower (no genre translations).
+Recommended for **TMDB poster images** and complete **metadata localization**.
+Without a TMDB key, the plugin can still localize via Trakt's translation
+endpoint, and an OMDb key can provide posters.
 
 1. Sign up at <https://www.themoviedb.org/signup> (free)
 2. **Verify your email** — you can't request an API key until your email is
@@ -50,6 +50,29 @@ translation endpoint, but coverage is narrower (no genre translations).
 
 The v3 key stays accessible at <https://www.themoviedb.org/settings/api>.
 
+## 2b. OMDb — optional poster fallback
+
+OMDb is optional. Add it when you want posters without a TMDB key, or as a
+fallback for titles where TMDB has no poster.
+
+1. Open <https://www.omdbapi.com/apikey.aspx>
+2. Choose **FREE!** and enter your email, name, and a short personal-use
+   description
+3. Activate the key from the email OMDb sends you
+
+Important limits:
+
+- Free keys allow 1,000 requests per day. Sync Trakt caches successful
+  results—including known missing posters—for 90 days, but a very large first
+  sync can still reach the daily limit.
+- The dedicated high-resolution OMDb Poster API is Patreon-only. Sync Trakt
+  uses the poster URL returned by the regular title-data API, so image
+  resolution and availability vary.
+- OMDb lookup requires the IMDb ID supplied by Trakt. Items without one follow
+  the configured fallback behavior.
+- OMDb content is licensed under
+  [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/).
+
 ## 3. Configure the plugin
 
 After installing the plugin (see [README → Install](../README.md#-install)),
@@ -68,35 +91,45 @@ open **Settings → Sync Trakt**.
 ### TMDB
 
 5. Paste **API key (v3 auth)** from step 2
-6. Pick a **Poster size** — `w500` is a good default
+6. Choose **Poster source**:
+   - `Auto` — TMDB first, then OMDb when TMDB is unavailable or has no poster
+   - `TMDB only` — never query OMDb for posters
+   - `OMDb only` — use OMDb for posters while TMDB can still handle localization
+7. Pick a **Poster size** — `w500` is a good TMDB default
+
+### OMDb (optional)
+
+8. Paste the OMDb API key from step 2b
+9. Click **Test OMDb API key**. The test makes one known-title request and
+   counts toward the daily limit
 
 ### Localization (optional)
 
-7. **Metadata language** — pick a preset (e.g. `Chinese (Simplified, China)`
+10. **Metadata language** — pick a preset (e.g. `Chinese (Simplified, China)`
    for `zh-CN`) or **Custom** to enter any BCP 47 code. Leave on `Default`
    to keep everything in English
-8. **Plugin UI language** — `English` or `简体中文`. Affects the settings
+11. **Plugin UI language** — `English` or `简体中文`. Affects the settings
    tab, command palette, notice popups
-9. **Note template language** — picks the bundled default templates' language
+12. **Note template language** — picks the bundled default templates' language
    for the **Reset to default** button. If your current template is unmodified,
    switching this auto-rewrites it
 
 ### Sync sources — pick what to sync
 
-10. **Sync watchlist** — items you want to watch *(default ON)*
-11. **Sync favorites** — items you've marked as favorites *(default ON)*
-12. **Sync watch history** — items you've watched, with play count and last
+13. **Sync watchlist** — items you want to watch *(default ON)*
+14. **Sync favorites** — items you've marked as favorites *(default ON)*
+15. **Sync watch history** — items you've watched, with play count and last
     watched timestamp *(default OFF; can be a large dataset)*
-13. **Sync watch history (detailed)** — adds per-episode (or per-movie) watch
+16. **Sync watch history (detailed)** — adds per-episode (or per-movie) watch
     timestamps to the note body via `{{watch_history}}`. Only shown when **Sync
     watch history** is on. *(default OFF; significantly slower for large
     libraries — Trakt's `/sync/history` endpoint paginates at 100 watch events
     per page)*
-14. **Sync ratings** — items you've rated 1–10 *(default OFF)*
+17. **Sync ratings** — items you've rated 1–10 *(default OFF)*
 
 ### Run the first sync
 
-15. Command palette (Ctrl/Cmd+P) → **Traktr: Sync**
+18. Command palette (Ctrl/Cmd+P) → **Traktr: Sync**
 
 For a quick first test, leave only **Sync watchlist** on — most users have
 < 100 items in their watchlist, so it finishes fast.
@@ -142,6 +175,7 @@ to use a different `Notes folder` in its settings.
 |---|---|
 | Trakt client ID + secret | [Trakt API Applications](https://app.trakt.tv/settings/apps/api) → click your app |
 | TMDB API key (v3 auth) | <https://www.themoviedb.org/settings/api> |
+| OMDb API key | Your OMDb activation email; request a replacement at <https://www.omdbapi.com/apikey.aspx> |
 
 Trakt access tokens auto-refresh; you don't need to do anything. TMDB API keys
 don't expire.

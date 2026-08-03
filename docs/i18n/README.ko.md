@@ -120,24 +120,24 @@ TMDB 메타데이터와 상세 시청 기록 집계처럼 크지만 재구축 �
 ## 🚀 빠른 시작
 
 1. 설정 → 커뮤니티 플러그인 → **찾아보기** → **Sync Trakt** 검색 → **설치** → **활성화**
-2. 설정 → **Sync Trakt** → Trakt + TMDB API 키 입력([설정 가이드](../SETUP.md))
+2. 설정 → **Sync Trakt** → Trakt를 연결하고 선택적으로 TMDB/OMDb 키 추가([설정 가이드](../SETUP.md))
 3. 명령 팔레트 → **Sync Trakt: Sync**
 
 ## 🔑 API 키가 각각 잠금 해제하는 기능
 
-플러그인은 두 개의 API를 사용합니다. **Trakt는 필수** — 없으면 아무것도 동기화할 수 없습니다. **TMDB는 선택사항**이지만, 대부분의 사용자가 이 플러그인을 설치하는 진짜 이유(다국어 메타데이터·포스터)는 이쪽에서 잠금 해제됩니다:
+플러그인은 세 가지 서비스에 연결합니다. **Trakt는 필수** — 없으면 아무것도 동기화할 수 없습니다. **TMDB는 선택사항**이며 현지화된 메타데이터와 TMDB 포스터를 제공합니다. **OMDb도 선택사항**이며 IMDb ID로 포스터를 찾는 데만 사용됩니다.
 
-| 기능 | Trakt API<br/>_(필수)_ | TMDB API<br/>_(권장)_ |
-|---|:---:|:---:|
-| Trakt 라이브러리 동기화(watchlist, watched, favorites, ratings) | ✅ | — |
-| 에피소드별 시청 타임스탬프 | ✅ | — |
-| title / overview / tagline 을 자국어로 번역 | ✅ 기본 | ✅ 더 높은 품질 |
-| **genres를 자국어로 번역** | ❌ | ✅ |
-| **노트에 포스터 이미지 임베드** | ❌ | ✅ |
+| 기능 | Trakt API<br/>_(필수)_ | TMDB API<br/>_(선택)_ | OMDb API<br/>_(선택)_ |
+|---|:---:|:---:|:---:|
+| Trakt 라이브러리 동기화(watchlist, watched, favorites, ratings) | ✅ | — | — |
+| 에피소드별 시청 타임스탬프 | ✅ | — | — |
+| title / overview / tagline 을 자국어로 번역 | ✅ 기본 | ✅ 더 높은 품질 | — |
+| **genres를 자국어로 번역** | ❌ | ✅ | — |
+| **노트에 포스터 이미지 임베드** | ❌ | ✅ | ✅ |
 
-영어 콘텐츠로 만족하고 포스터가 필요 없다면 TMDB는 비워둬도 됩니다 — Trakt만으로 충분합니다. 비영어 완전 현지화(genres와 포스터 포함)를 원한다면 **TMDB 키를 입력**하세요([무료 가입](https://www.themoviedb.org/settings/api)). 키를 붙여 넣은 후, 입력란 옆의 **Test** 버튼으로 작동 여부를 확인한 다음 첫 동기화를 진행하세요.
+영어 콘텐츠만 필요하고 포스터가 없어도 된다면 Trakt만으로 충분합니다. 현지화된 genres와 TMDB 포스터에는 TMDB를, TMDB 없이 포스터를 쓰거나 fallback이 필요할 때는 OMDb를 사용하세요. 무료 OMDb 키는 하루 1,000회 요청으로 제한되며 Daily Notes 전용 동기화는 이 할당량을 사용하지 않습니다. 각 키는 해당 **Test** 버튼으로 확인하세요.
 
-→ [두 키의 전체 설정 가이드](../SETUP.md)
+→ [모든 키의 전체 설정 가이드](../SETUP.md)
 
 ## 📦 설치
 
@@ -181,7 +181,7 @@ npm run test:i18n  # 스모크 테스트
 
 | 문서 | 내용 |
 |---|---|
-| [SETUP](../SETUP.md) | Trakt + TMDB API 키 생성, 초기 설정, 문제 해결 (영어) |
+| [SETUP](../SETUP.md) | Trakt 및 선택적 TMDB/OMDb 키, 초기 설정, 문제 해결 (영어) |
 | [MANUAL](../MANUAL.md) | 설정 전체 참조, frontmatter 필드, 템플릿 변수, 동기화 동작 (영어) |
 | [DEVELOPER](../DEVELOPER.md) | 아키텍처 개요, 데이터 흐름, 확장 방법 (영어 전용) |
 | [docs/i18n/](.) | README의 8개 언어 번역 |

@@ -2,7 +2,7 @@
 
 > 🌐 [English](../SETUP.md) · [简体中文](SETUP.zh-CN.md) · [繁體中文](SETUP.zh-TW.md) · **日本語**
 
-Sync Trakt をあなたのアカウントに接続するまでの完全なフロー：Trakt OAuth アプリケーションの作成、TMDB API キーの取得、プラグインの設定、最初の同期。
+Sync Trakt をあなたのアカウントに接続するまでの完全なフロー：Trakt OAuth アプリケーションの作成、任意の TMDB / OMDb API キーの取得、プラグインの設定、最初の同期。
 
 ## 1. Trakt — OAuth アプリケーションを作成
 
@@ -20,7 +20,7 @@ Sync Trakt をあなたのアカウントに接続するまでの完全なフロ
 
 ## 2. TMDB — v3 API キーを取得
 
-**ポスター画像に必須**、**メタデータローカライズに強く推奨**。TMDB キーがなくてもプラグインは Trakt の翻訳エンドポイント経由でローカライズできますが、カバー範囲が狭くなります（ジャンル翻訳なし）。
+**TMDB ポスター画像**と完全な**メタデータローカライズ**に推奨。TMDB キーがなくてもプラグインは Trakt の翻訳エンドポイント経由でローカライズでき、OMDb キーを設定すればポスターも取得できます。
 
 1. <https://www.themoviedb.org/signup> でサインアップ（無料）
 2. **メールを認証** — 認証しないと API キー申請ができません。受信箱 / 迷惑メールフォルダを確認
@@ -36,6 +36,16 @@ Sync Trakt をあなたのアカウントに接続するまでの完全なフロ
 
 v3 キーは <https://www.themoviedb.org/settings/api> でいつでも確認できます。
 
+## 2b. OMDb — 任意のポスターフォールバック
+
+TMDB キーなしでポスターを取得したい場合、または TMDB に画像がないタイトルを補完したい場合に OMDb を追加できます。
+
+1. <https://www.omdbapi.com/apikey.aspx> を開く
+2. **FREE!** を選び、メールアドレス、名前、短い個人利用の説明を入力
+3. OMDb から届くメールでキーを有効化
+
+無料キーは 1 日 1,000 リクエストまでです。専用の高解像度 Poster API は Patreon 限定のため、Sync Trakt は通常のタイトルデータ API が返す画像を使用します。画像の解像度や有無はタイトルによって異なり、検索には Trakt が提供する IMDb ID が必要です。成功した検索結果（ポスターなしを含む）は 90 日間キャッシュされます。OMDb のコンテンツは [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) で公開されています。
+
 ## 3. プラグインを設定
 
 プラグインをインストールしたら（[README → Install](README.ja.md#-インストール) 参照）、**設定 → Sync Trakt** を開きます。
@@ -47,28 +57,29 @@ v3 キーは <https://www.themoviedb.org/settings/api> でいつでも確認で�
 3. 任意のブラウザで URL を開き、Trakt にログイン、コードを貼り付けて **Continue** をクリック
 4. ポップアップは自動で閉じ、**Connection status** が **Traktr connected** に変わります
 
-### TMDB
+### メタデータとポスター
 
 5. 手順 2 で取得した **API key (v3 auth)** を貼り付け
-6. **Poster size** を選択 — `w500` がよいデフォルト値
+6. 任意で手順 2b の **OMDb API key** を貼り付け
+7. **Poster source** を選択 — 通常は `Auto (TMDB → OMDb)` のままにし、**Poster size** は `w500` がよいデフォルト値
 
 ### Localization（任意）
 
-7. **Metadata language** — プリセットを選ぶ（例：`Japanese` で `ja-JP`）か、**Custom** で任意の BCP 47 コードを入力。`Default` のままならすべて英語
-8. **Plugin UI language** — `English` または `简体中文`。設定タブ、コマンドパレット、通知ポップアップに影響
-9. **Note template language** — バンドルされたデフォルトテンプレートの言語を選択。現在のテンプレートが未編集の場合、この設定を切り替えると自動で書き換えられます
+8. **Metadata language** — プリセットを選ぶ（例：`Japanese` で `ja-JP`）か、**Custom** で任意の BCP 47 コードを入力。`Default` のままならすべて英語
+9. **Plugin UI language** — `English` または `简体中文`。設定タブ、コマンドパレット、通知ポップアップに影響
+10. **Note template language** — バンドルされたデフォルトテンプレートの言語を選択。現在のテンプレートが未編集の場合、この設定を切り替えると自動で書き換えられます
 
 ### Sync sources — 同期するソースを選択
 
-10. **Sync watchlist** — 観たいアイテム（デフォルト ON）
-11. **Sync favorites** — お気に入りに登録したアイテム（デフォルト ON）
-12. **Sync watch history** — 視聴済みアイテム、再生回数と最終視聴時刻付き（デフォルト OFF；データ量が大きい可能性あり）
-13. **Sync watch history (detailed)** — `{{watch_history}}` 経由でノート本文にエピソード単位（または映画単位）の視聴タイムスタンプを追加。**Sync watch history が ON のときのみ表示**。（デフォルト OFF；大規模ライブラリでは大幅に遅くなります — Trakt の `/sync/history` エンドポイントは 1 ページ 100 視聴イベント）
-14. **Sync ratings** — 1-10 で評価したアイテム（デフォルト OFF）
+11. **Sync watchlist** — 観たいアイテム（デフォルト ON）
+12. **Sync favorites** — お気に入りに登録したアイテム（デフォルト ON）
+13. **Sync watch history** — 視聴済みアイテム、再生回数と最終視聴時刻付き（デフォルト OFF；データ量が大きい可能性あり）
+14. **Sync watch history (detailed)** — `{{watch_history}}` 経由でノート本文にエピソード単位（または映画単位）の視聴タイムスタンプを追加。**Sync watch history が ON のときのみ表示**。（デフォルト OFF；大規模ライブラリでは大幅に遅くなります — Trakt の `/sync/history` エンドポイントは 1 ページ 100 視聴イベント）
+15. **Sync ratings** — 1-10 で評価したアイテム（デフォルト OFF）
 
 ### 最初の同期を実行
 
-15. コマンドパレット（Ctrl/Cmd+P）→ **Traktr: Sync**
+16. コマンドパレット（Ctrl/Cmd+P）→ **Traktr: Sync**
 
 最初のテストには **Sync watchlist のみ** をオンにすることをおすすめします — ほとんどのユーザーは watchlist が 100 件未満なので、すぐに終わります。
 
@@ -102,5 +113,6 @@ v3 キーは <https://www.themoviedb.org/settings/api> でいつでも確認で�
 |---|---|
 | Trakt client ID + secret | [Trakt API Applications](https://app.trakt.tv/settings/apps/api) → アプリをクリック |
 | TMDB API key (v3 auth) | <https://www.themoviedb.org/settings/api> |
+| OMDb API key | OMDb の有効化メール。再申請は <https://www.omdbapi.com/apikey.aspx> |
 
 Trakt のアクセストークンは自動更新されるので、何もする必要はありません。TMDB API キーは期限切れになりません。

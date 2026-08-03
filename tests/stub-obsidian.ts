@@ -3,21 +3,23 @@
 // referenced by code under test are implemented; everything else is a no-op
 // or a stub that records calls.
 
+type StubResponse = {
+  status: number;
+  json: unknown;
+  headers: Record<string, string>;
+};
+
 export const requestUrlMock = {
   calls: [] as Array<{ url: string; method?: string; headers?: Record<string, string> }>,
-  responder: null as null | ((req: { url: string }) => {
-    status: number;
-    json: unknown;
-    headers: Record<string, string>;
-  }),
+  responder: null as null | ((
+    req: { url: string },
+  ) => StubResponse | Promise<StubResponse>),
 };
 
 export function resetRequestUrlMock(
-  responder: (req: { url: string }) => {
-    status: number;
-    json: unknown;
-    headers: Record<string, string>;
-  },
+  responder: (
+    req: { url: string },
+  ) => StubResponse | Promise<StubResponse>,
 ) {
   requestUrlMock.calls = [];
   requestUrlMock.responder = responder;

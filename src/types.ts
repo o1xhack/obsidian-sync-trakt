@@ -253,6 +253,14 @@ export interface TmdbCacheEntry {
    */
   cache_version?: number;
   poster_url: string;
+  /**
+   * False when the entry was fetched for translation only and the localized
+   * response had no poster. A later TMDB-poster request can then upgrade the
+   * entry instead of treating the missing poster as final until TTL expiry.
+   * Older entries omit this because their fetch path always attempted the
+   * default-poster fallback.
+   */
+  poster_fallback_attempted?: boolean;
   translation: TmdbTranslationData | null;
   cached_at: number;
   expires_at: number;
@@ -270,6 +278,20 @@ export interface TmdbTranslationData {
 
 export interface TmdbCache {
   [key: string]: TmdbCacheEntry;
+}
+
+/** Poster-only OMDb cache entry. Kept separate from TMDB metadata so clearing
+ * one provider never invalidates the other and provider changes cannot return
+ * a URL from the wrong source. */
+export interface OmdbPosterCacheEntry {
+  cache_version?: number;
+  poster_url: string;
+  cached_at: number;
+  expires_at: number;
+}
+
+export interface OmdbPosterCache {
+  [key: string]: OmdbPosterCacheEntry;
 }
 
 export interface NormalizedItem {

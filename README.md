@@ -19,11 +19,12 @@
 
 - **Detailed watch history** — exactly which episode you watched at what time, including re-watches, kept in sync as you keep watching
 - **Metadata in 15+ languages** — translate titles / overviews / taglines / genres via TMDB. Built-in presets for Chinese (CN / TW / HK), Japanese, Korean, French, German, Spanish (ES / MX), Portuguese (BR), Italian, Russian — plus a custom mode for any TMDB-supported locale. **Strict primary + user-defined fallback** (e.g. zh-CN with English fallback) prevents silent zh-TW substitutions when the primary translation is missing. English originals always preserved in `*_original_*` frontmatter fields
+- **Flexible poster sources** — choose `Auto`, `TMDB only`, or `OMDb only`. Auto keeps TMDB first and falls back to OMDb by IMDb ID when TMDB has no poster. OMDb is poster-only, so it never overrides Trakt/TMDB titles, translations, genres, or ratings
 - **Filenames follow your language** — switch metadata language and existing notes auto-rename on the next sync to match the new title. Internal Obsidian links update automatically. One-shot "Rename now" button in settings for manual triggers
 - **Note templates in 11 languages** — hand-curated bundled templates (en + zh-CN + zh-TW + ja + ko + fr + de + it + es + pt-BR + ru). Pick from the template-language dropdown; switch any time without losing customizations
 - **Tabbed settings UI** — General / Notes / Sync / Daily Notes. Last-viewed tab remembered per device
 - **Daily Notes integration** — auto-injects per-event lines (watched / watchlist / favorited / rated) into your Daily Note on every sync, chronologically sorted, in your chosen template language. Marker-bounded region is fully isolated — content outside it is **never modified**. Optional incremental mode preserves your hand-written annotations inside the marker block. Manual date-range backfill with quick presets (Last 7 days / This month / etc.). Daily Notes can also run on their own auto-sync interval without rewriting media notes. See [spec 0006](docs/specs/0006-daily-notes-integration.md) and [spec 0011](docs/specs/0011-daily-notes-auto-sync.md)
-- **Fast incremental sync** — first sync seeds the local TMDB cache + Trakt history state; subsequent syncs only fetch what changed. Steady-state sync time drops from minutes to single-digit seconds. See [spec 0001](docs/specs/0001-incremental-sync.md)
+- **Fast incremental sync** — first sync seeds local TMDB/OMDb caches + Trakt history state; subsequent syncs reuse cached metadata and posters. Steady-state sync time drops from minutes to single-digit seconds. See [spec 0001](docs/specs/0001-incremental-sync.md)
 - **Quiet writes** — sync only rewrites notes whose content actually changed. After watching one new episode, a 1200-item library writes one note instead of all 1200 — your cross-device sync layer (Obsidian Sync / iCloud / Syncthing) stops re-uploading the entire library every run. See [spec 0002](docs/specs/0002-diff-based-write.md)
 - **Per-setting cloud toggle** — pick which settings sync across devices and which stay local. Auto-sync interval, startup-sync toggle, UI language — each can be device-local so your Mac and iPhone don't fight over them. See [spec 0003](docs/specs/0003-device-local-settings.md)
 
@@ -111,12 +112,12 @@ writing concurrently.
 
 ## 🔄 Cross-device sync
 
-Auth state — Trakt tokens, TMDB key, all settings — lives in `<vault>/.obsidian/plugins/sync-trakt/data.json` and follows your vault-sync layer. Configure auth once on Mac, share with iPhone via Obsidian Sync (with `Plugin data` enabled), Syncthing, iCloud + Advanced Data Protection, or Cryptomator. The plugin doesn't store anything on a server.
+Auth state — Trakt tokens, TMDB/OMDb keys, all settings — lives in `<vault>/.obsidian/plugins/sync-trakt/data.json` and follows your vault-sync layer. Configure auth once on Mac, share with iPhone via Obsidian Sync (with `Plugin data` enabled), Syncthing, iCloud + Advanced Data Protection, or Cryptomator. The plugin doesn't store anything on a server.
 
-Large rebuildable runtime caches, including TMDB metadata and detailed
+Large rebuildable runtime caches, including TMDB metadata, OMDb posters, and detailed
 watch-history aggregates, live outside the vault in each device's local
 Obsidian app storage. They are not uploaded to Obsidian Sync, and each
-device can rebuild them from Trakt/TMDB if cleared. A small synced
+device can rebuild them from Trakt/TMDB/OMDb if cleared. A small synced
 full-refresh coordinator keeps devices from writing detailed history from
 an older local cache after another device has detected Trakt-side
 deletions.
@@ -139,24 +140,32 @@ Filter by `trakt_type = "movie"` / `"show"`, sort by `trakt_year` / `trakt_ratin
 ## 🚀 Quick start
 
 1. Settings → Community plugins → **Browse** → search for **Sync Trakt** → **Install** → **Enable**
-2. Settings → **Sync Trakt** → fill your Trakt + TMDB API keys ([SETUP guide](docs/SETUP.md))
+2. Settings → **Sync Trakt** → connect Trakt, then add optional TMDB / OMDb API keys as needed ([SETUP guide](docs/SETUP.md))
 3. Command palette → **Sync Trakt: Sync**
 
 ## 🔑 API keys: what each one unlocks
 
-The plugin uses two APIs. **Trakt is mandatory** — without it, the plugin can't sync anything. **TMDB is optional** but unlocks most of what makes the plugin worth installing. Here's the breakdown:
+The plugin connects to three services. **Trakt is mandatory** — without it,
+the plugin can't sync anything. **TMDB is optional** and provides richer
+localization plus the primary poster source. **OMDb is also optional** and is
+used only for poster lookup by IMDb ID.
 
-| Feature | Trakt API<br/>_(required)_ | TMDB API<br/>_(recommended)_ |
-|---|:---:|:---:|
-| Sync your Trakt library (watchlist, watched, favorites, ratings) | ✅ | — |
-| Per-episode watch timestamps | ✅ | — |
-| Title / overview / tagline in your language | ✅ basic | ✅ higher quality |
-| **Genres in your language** | ❌ | ✅ |
-| **Poster images embedded in notes** | ❌ | ✅ |
+| Feature | Trakt API<br/>_(required)_ | TMDB API<br/>_(recommended)_ | OMDb API<br/>_(optional)_ |
+|---|:---:|:---:|:---:|
+| Sync your Trakt library (watchlist, watched, favorites, ratings) | ✅ | — | — |
+| Per-episode watch timestamps | ✅ | — | — |
+| Title / overview / tagline in your language | ✅ basic | ✅ higher quality | — |
+| **Genres in your language** | ❌ | ✅ | — |
+| **Poster images embedded in notes** | ❌ | ✅ | ✅ |
 
-If you only want English content and no posters, you can leave TMDB blank — Trakt alone is enough. If you want any non-English localization beyond title/overview/tagline, **add a TMDB key** ([free signup](https://www.themoviedb.org/settings/api)). After pasting your key, click the **Test** button next to the field to confirm it works before your first sync.
+If you only want English content and no posters, Trakt alone is enough. Add a
+[TMDB key](https://www.themoviedb.org/settings/api) for localized genres and
+TMDB posters. Add an [OMDb key](https://www.omdbapi.com/apikey.aspx) when you
+want poster-only fallback or posters without TMDB. The OMDb free key is limited
+to 1,000 requests per day, and Daily Notes-only sync deliberately never spends
+that quota.
 
-→ [Full walkthrough for both keys](docs/SETUP.md)
+→ [Full walkthrough for all keys](docs/SETUP.md)
 
 ## 📦 Install
 
@@ -200,7 +209,7 @@ Then copy `main.js`, `manifest.json`, `styles.css` to `<vault>/.obsidian/plugins
 
 | Doc | Purpose |
 |---|---|
-| [SETUP](docs/SETUP.md) | Trakt + TMDB API key creation, first-time configuration, troubleshooting |
+| [SETUP](docs/SETUP.md) | Trakt + optional TMDB / OMDb API key creation, first-time configuration, troubleshooting |
 | [MANUAL](docs/MANUAL.md) | Full settings reference, frontmatter fields, template variables, sync behavior |
 | [DEVELOPER](docs/DEVELOPER.md) | Architecture overview, data flow, how to extend (English only) |
 | [docs/i18n/](docs/i18n/) | Translations of README / SETUP / MANUAL into 8 additional languages |
